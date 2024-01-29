@@ -78,9 +78,9 @@ def layer_norm_estimates(b, l, e, element_size=4E-6):
     # little rough calcs, pretty sure some constant factor is off..
     total_flops_bwd = 2 * (b * l * e * flops_per_mult + b * l * e * flops_per_add) # g,b
     total_flops_bwd += (5 * b * l * e * flops_per_mult) + (4 * b * l * (e - 1) * flops_per_add)
-    activation_grad_mem = 3 * (b * l * e) * element_size #dldy, dldx, x_hat
+    activation_grad_mem = 2 * (b * l * e) * element_size #dldy, dldx
     weights_grad_mem = 2 * e * element_size
-    total_mem_bwd = activation_grad_mem + weights_grad_mem
+    total_mem_bwd = activation_grad_mem + weights_grad_mem + activation_buffer
 
     stats_bwd = {"flops_bwd": total_flops_bwd,
                  "activation_grad_mem": activation_grad_mem,
