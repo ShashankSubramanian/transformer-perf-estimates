@@ -57,7 +57,7 @@ def nonlinear_act_estimates(b, l, e, element_size=4E-6):
     #############################
     total_flops_bwd =  b * l * e * flops_per_mult
     activation_grad_mem = (b * l * e) * element_size
-    total_mem_bwd = activation_grad_mem
+    total_mem_bwd = activation_grad_mem + activation_buffer
     
     stats_bwd = {"flops_bwd": total_flops_bwd, 
                  "activation_grad_mem": activation_grad_mem, 
@@ -122,7 +122,7 @@ def dropout_estimates(b, l, e, element_size=4E-6, mask_element_size=1E-6):
     #############################
     total_flops_bwd =  b * l * e  * flops_per_mult
     activation_grad_mem = (b * l * e) * element_size
-    total_mem_bwd = activation_grad_mem
+    total_mem_bwd = activation_grad_mem + activation_buffer
     
     stats_bwd = {"flops_bwd": total_flops_bwd, 
                  "activation_grad_mem": activation_grad_mem, 
@@ -187,7 +187,7 @@ def softmax_estimates(b, l, h, element_size=4E-6):
     #############################
     total_flops_bwd =  (2 * b * h * l * l) * flops_per_mult +  (b * h * l * (l - 1)) * flops_per_add + (b * h * l * l) * flops_per_add
     activation_grad_mem = 2 * (b * h * l * l) * element_size
-    total_mem_bwd = activation_grad_mem
+    total_mem_bwd = activation_grad_mem + activation_buffer
     
     stats_bwd = {"flops_bwd": total_flops_bwd, 
                  "activation_grad_mem": activation_grad_mem, 
