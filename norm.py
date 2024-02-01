@@ -4,7 +4,7 @@ import numpy as np
     Perf estimates for normalization layers
 '''
 
-def layer_norm_estimates(b, l, e, element_size=4E-6):
+def layer_norm_estimates(b, l, e, element_size=4E-6, flops_units=1E-12):
     """
     TODO: parallelism incomplete!
     my notes: all_gather after in fwd pass always (but is that true?) careful
@@ -46,7 +46,6 @@ def layer_norm_estimates(b, l, e, element_size=4E-6):
     ####### forward pass ########
     #############################
     # can be different if complex numbers (drop for now)
-    flops_units = 1E-9 # teraflops
     flops_per_mult = 1 * flops_units
     flops_per_add = 1 * flops_units
 

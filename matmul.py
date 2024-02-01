@@ -4,7 +4,7 @@ import numpy as np
     Perf estimates for matrix-matrix multiply
 '''
 
-def linear_estimates(b, l, e, f, element_size=4E-6, has_bias=False):
+def linear_estimates(b, l, e, f, element_size=4E-6, has_bias=False, flops_units=1E-12):
     """
     nn.Linear layer estimates
     parameters: b: batch size
@@ -38,7 +38,6 @@ def linear_estimates(b, l, e, f, element_size=4E-6, has_bias=False):
     ####### forward pass ########
     #############################
     # can be different if complex numbers (drop for now)
-    flops_units = 1E-9 # teraflops
     flops_per_mult = 1 * flops_units
     flops_per_add = 1 * flops_units
 
@@ -92,13 +91,13 @@ def linear_estimates(b, l, e, f, element_size=4E-6, has_bias=False):
     
     return stats
 
-def logit_estimates(b, l, e, h, element_size=4E-6):
+def logit_estimates(b, l, q, h, element_size=4E-6, flops_units=1E-12):
     """
     logit layer estimates
     parameters: b: batch size
                 l: seq length
-                e: embedding dim/hidden dim
                 h: number of attention heads
+                q: embedding dim/h
                 element_size: in MB
 
     tensor shapes: input tensor: (b,h,l,q)
@@ -122,11 +121,8 @@ def logit_estimates(b, l, e, h, element_size=4E-6):
     ####### forward pass ########
     #############################
     # can be different if complex numbers (drop for now)
-    flops_units = 1E-9 # teraflops
     flops_per_mult = 1 * flops_units
     flops_per_add = 1 * flops_units
-
-    q = e // h
 
     # total flops
     total_flops_fwd = b * h * l * l * (q * flops_per_mult + (q - 1) * flops_per_add)
@@ -163,15 +159,15 @@ def logit_estimates(b, l, e, h, element_size=4E-6):
     stats = {**stats_fwd, **stats_bwd}
     return stats
 
-def attend_estimates(b, l, e, h, element_size=4E-6):
+def attend_estimates(b, l, q, h, element_size=4E-6, flops_units=1E-12):
     """
     attend layer estimates: for now, diff from linear/matmul 
     because both inputs are activations. TODO: combine both 
     into a single matmul primitive
     parameters: b: batch size
                 l: seq length
-                e: embedding dim/hidden dim
                 h: number of attention heads
+                q: embedding dim/h
                 element_size: in MB
 
     
@@ -196,11 +192,8 @@ def attend_estimates(b, l, e, h, element_size=4E-6):
     ####### forward pass ########
     #############################
     # can be different if complex numbers (drop for now)
-    flops_units = 1E-9 # teraflops
     flops_per_mult = 1 * flops_units
     flops_per_add = 1 * flops_units
-
-    q = e // h
 
     # total flops
     total_flops_fwd = b * h * l * q * (l * flops_per_mult + (l - 1) * flops_per_add)
