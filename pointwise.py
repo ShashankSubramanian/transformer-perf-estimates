@@ -4,7 +4,7 @@ import numpy as np
     Perf estimates for pointwise ops
 '''
 
-def nonlinear_act_estimates(b, l, e, element_size=4E-6):
+def nonlinear_act_estimates(b, l, e, element_size=4E-6, flops_units=1E-12):
     """
     activation function estimates
     parameters: b: batch size
@@ -29,7 +29,6 @@ def nonlinear_act_estimates(b, l, e, element_size=4E-6):
     ####### forward pass ########
     #############################
     # can be different if complex numbers (drop for now)
-    flops_units = 1E-9 # teraflops
     flops_per_mult = 1 * flops_units
     flops_per_add = 1 * flops_units
     
@@ -67,7 +66,7 @@ def nonlinear_act_estimates(b, l, e, element_size=4E-6):
     stats = {**stats_fwd, **stats_bwd}
     return stats
 
-def dropout_estimates(b, l, e, element_size=4E-6, mask_element_size=1E-6):
+def dropout_estimates(b, l, e, element_size=4E-6, mask_element_size=1E-6, flops_units=1E-12):
     """
     dropout layer estimates
     parameters: b: batch size
@@ -84,6 +83,7 @@ def dropout_estimates(b, l, e, element_size=4E-6, mask_element_size=1E-6):
              Y = random_mask(X)
             (b,l,e) = (b,l,e) * (b,l,e)
         backward pass:
+            dl/dX = dl/dY * random_mask
             
     
     comments: 
@@ -92,7 +92,6 @@ def dropout_estimates(b, l, e, element_size=4E-6, mask_element_size=1E-6):
     ####### forward pass ########
     #############################
     # can be different if complex numbers (drop for now)
-    flops_units = 1E-9 # teraflops
     flops_per_mult = 1 * flops_units
     flops_per_add = 1 * flops_units
 
@@ -132,7 +131,7 @@ def dropout_estimates(b, l, e, element_size=4E-6, mask_element_size=1E-6):
     stats = {**stats_fwd, **stats_bwd}
     return stats
 
-def softmax_estimates(b, l, h, element_size=4E-6):
+def softmax_estimates(b, l, h, element_size=4E-6, flops_units=1E-12):
     """
     dropout layer estimates
     parameters: b: batch size
@@ -158,7 +157,6 @@ def softmax_estimates(b, l, h, element_size=4E-6):
     ####### forward pass ########
     #############################
     # can be different if complex numbers (drop for now)
-    flops_units = 1E-9 # teraflops
     flops_per_mult = 1 * flops_units
     flops_per_add = 1 * flops_units
     flops_per_exp = 1 * flops_units
