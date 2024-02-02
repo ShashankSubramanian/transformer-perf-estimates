@@ -57,7 +57,7 @@ def layer_norm_estimates(b, l, e, element_size=4E-6, flops_units=1E-12):
 
     #total mem
     activation_in_mem = (b * l * e) * element_size
-    activation_in_other_mem = 0
+    activation_in_other_mem  = 2 * (b * l) * element_size # mean and std
     activation_out_mem = (b * l * e) * element_size
     activation_buffer = (b * l * e) * element_size
     weights_mem = 2 * e * element_size
