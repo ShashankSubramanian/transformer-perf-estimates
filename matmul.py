@@ -221,7 +221,7 @@ def attend_estimates(b, l, q, h, element_size=4E-6, flops_units=1E-12):
     #############################
     total_flops_bwd = b * h * l * l * (q * flops_per_mult + (q - 1) * flops_per_add)
     total_flops_bwd += b * h * l * q * (l * flops_per_mult + (l - 1) * flops_per_add)
-    activation_grad_mem = (b * h * l * q) * element_size
+    activation_grad_mem = 2 * (b * h * l * q) * element_size
     activation_grad_mem_att = (b * h * l * l) * element_size
     total_mem_bwd = activation_grad_mem + activation_grad_mem_att + activation_buffer
 
