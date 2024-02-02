@@ -24,9 +24,11 @@ def get_time_comm(vol, n_gpus=4, comm_type='allreduce', topology='nvlink', empir
             t_comm = 0
     return t_comm * 10**3
 
-def get_total_time(t_comp, t_comm, system={}):
-    # return max(t_comp, t_comm) # overlap
-    return t_comp + t_comm
+def get_total_time(t_comp, t_comm, system={}, use_max=False):
+    if use_max:
+        return max(t_comp, t_comm) # overlap
+    else:
+        return t_comp + t_comm
 
 def get_topology(n_gpus, system={}):
     if n_gpus != n_gpus:
