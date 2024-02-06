@@ -1,17 +1,17 @@
 import numpy as np
 
-def comm_type_ops (n, comm_type):
-    match comm_type:
-        case 'allreduce':
-            result = 2*(n-1)/n
-        case 'reducescatter':
-            result = (n-1)/n
-        case 'allgather':
-            result = (n-1)/n
-        case 'broadcast':
-            result = 1
-        case 'reduce':
-            result 1
+# def comm_type_ops (n, comm_type):
+#     match comm_type:
+#         case 'allreduce':
+#             result = 2*(n-1)/n
+#         case 'reducescatter':
+#             result = (n-1)/n
+#         case 'allgather':
+#             result = (n-1)/n
+#         case 'broadcast':
+#             result = 1
+#         case 'reduce':
+#             result 1
 
 
 def get_time_flops(flops, use_tensor=True, system={}):
@@ -30,10 +30,10 @@ def get_time_comm(vol, n_gpus=4, comm_type='allreduce', topology='nvlink', empir
         t_comm = 0
     else:
         if topology == 'nvlink': # use nvlink
-            t_comm  = vol / system['nvlink_bandwidth'] * comm_type_ops(n,comm_type)
+            t_comm  = vol / system['nvlink_bandwidth'] #* comm_type_ops(n,comm_type)
             t_latency = np.log2(n_gpus) * system['nvlink_latency']
         elif topology == 'ib':
-            t_comm  = vol / system['ib_bandwidth'] * comm_type_ops(n,comm_type)
+            t_comm  = vol / system['ib_bandwidth'] #* comm_type_ops(n,comm_type)
             t_latency = np.log2(n_gpus) * system['ib_latency']
         else:
             t_comm = 0
