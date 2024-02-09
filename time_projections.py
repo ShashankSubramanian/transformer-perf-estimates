@@ -26,15 +26,17 @@ def get_time_mem(mem, system={}):
 
 def get_time_comm(vol, n_gpus=4, comm_type='allreduce', topology='nvlink', empirical=False, system={}):
     # effective_vol / effective_bandwidht: need an analytical model
+    
     if vol != vol:
         t_comm = 0
+        t_latency = 0
     else:
         if topology == 'nvlink': # use nvlink
             t_comm  = vol / system['nvlink_bandwidth'] #* comm_type_ops(n,comm_type)
-            t_latency = np.log2(n_gpus) * system['nvlink_latency']
+            t_latency = np.log2(max(1,n_gpus)) * system['nvlink_latency']
         elif topology == 'ib':
             t_comm  = vol / system['ib_bandwidth'] #* comm_type_ops(n,comm_type)
-            t_latency = np.log2(n_gpus) * system['ib_latency']
+            t_latency = np.log2(max(1,n_gpus)) * system['ib_latency']
         else:
             t_comm = 0
             t_latency =0

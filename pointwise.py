@@ -49,7 +49,10 @@ def nonlinear_act_estimates(b, l, e, element_size=4E-6, flops_units=1E-12):
                  "activation_out_mem": activation_out_mem, 
                  "activation_buffer": activation_buffer,
                  'weights_mem': weights_mem, 
-                 'total_mem_fwd': total_mem_fwd}
+                 'total_mem_fwd': total_mem_fwd,
+                 "comm_fwd":  0.0,
+                 "comm_fwd_type": "no-comm",
+                 "comm_size": 0}
     
     #############################
     ####### backward pass #######
@@ -61,7 +64,10 @@ def nonlinear_act_estimates(b, l, e, element_size=4E-6, flops_units=1E-12):
     stats_bwd = {"flops_bwd": total_flops_bwd, 
                  "activation_grad_mem": activation_grad_mem, 
                  "weights_grad_mem": 0, 
-                 'total_mem_bwd': total_mem_bwd}
+                 'total_mem_bwd': total_mem_bwd,
+                 "comm_bwd":  0.0,
+                 "comm_bwd_type": "no-comm",
+                 "comm_size": 0}
     
     stats = {**stats_fwd, **stats_bwd}
     return stats
@@ -114,7 +120,10 @@ def dropout_estimates(b, l, e, element_size=4E-6, mask_element_size=1E-6, flops_
                  "activation_out_mem": activation_out_mem, 
                  "activation_buffer": activation_buffer,
                  'weights_mem': weights_mem, 
-                 'total_mem_fwd': total_mem_fwd}
+                 'total_mem_fwd': total_mem_fwd,
+                 "comm_fwd":  0.0,
+                 "comm_fwd_type": "no-comm",
+                 "comm_size": 0}
     
     #############################
     ####### backward pass #######
@@ -126,7 +135,10 @@ def dropout_estimates(b, l, e, element_size=4E-6, mask_element_size=1E-6, flops_
     stats_bwd = {"flops_bwd": total_flops_bwd, 
                  "activation_grad_mem": activation_grad_mem, 
                  "weights_grad_mem": 0, 
-                 'total_mem_bwd': total_mem_bwd}
+                 'total_mem_bwd': total_mem_bwd,
+                 "comm_bwd":  0.0,
+                 "comm_bwd_type": "no-comm",
+                 "comm_size": 0}
     
     stats = {**stats_fwd, **stats_bwd}
     return stats
@@ -179,7 +191,10 @@ def softmax_estimates(b, l, h, element_size=4E-6, flops_units=1E-12):
                  "activation_out_mem": activation_out_mem, 
                  "activation_buffer": activation_buffer,
                  'weights_mem': weights_mem, 
-                 'total_mem_fwd': total_mem_fwd}
+                 'total_mem_fwd': total_mem_fwd,
+                 "comm_fwd":  0.0,
+                 "comm_fwd_type": "no-comm",
+                 "comm_size": 0}
     #############################
     ####### backward pass #######
     #############################
@@ -190,7 +205,10 @@ def softmax_estimates(b, l, h, element_size=4E-6, flops_units=1E-12):
     stats_bwd = {"flops_bwd": total_flops_bwd, 
                  "activation_grad_mem": activation_grad_mem, 
                  "weights_grad_mem": 0, 
-                 'total_mem_bwd': total_mem_bwd}
+                 'total_mem_bwd': total_mem_bwd,
+                 "comm_bwd":  0.0,
+                 "comm_bwd_type": "no-comm",
+                 "comm_size": 0}
     
     stats = {**stats_fwd, **stats_bwd}
     return stats

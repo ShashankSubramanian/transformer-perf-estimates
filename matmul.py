@@ -63,7 +63,11 @@ def linear_estimates(b, l, e, f, element_size=4E-6, has_bias=False, flops_units=
                  "activation_out_mem": activation_out_mem,
                  "activation_buffer": activation_buffer,
                  'weights_mem': weights_mem, 
-                 'total_mem_fwd': total_mem_fwd}
+                 'total_mem_fwd': total_mem_fwd,
+                 "comm_fwd":  0.0,
+                 "comm_fwd_type": "no-comm",
+                 "comm_size": 0,
+                 "total_mem_fwd": total_mem_fwd}
 
     
     #############################
@@ -85,7 +89,11 @@ def linear_estimates(b, l, e, f, element_size=4E-6, has_bias=False, flops_units=
     stats_bwd = {"flops_bwd": total_flops_bwd, 
                  "activation_grad_mem": xgrad_mem + ygrad_mem, 
                  "weights_grad_mem": weights_grad_mem, 
-                 'total_mem_bwd': total_mem_bwd}
+                 'total_mem_bwd': total_mem_bwd,
+                 "comm_bwd":  0.0,
+                 "comm_bwd_type": "no-comm",
+                 "comm_size": 0,
+                 "total_mem_bwd": total_mem_bwd}
     
     stats = {**stats_fwd, **stats_bwd}
     
@@ -142,7 +150,11 @@ def logit_estimates(b, l, q, h, element_size=4E-6, flops_units=1E-12):
                  "activation_out_mem": activation_out_mem,
                  "activation_buffer": activation_buffer,
                  'weights_mem': weights_mem,
-                 'total_mem_fwd': total_mem_fwd}
+                 'total_mem_fwd': total_mem_fwd,
+                 "comm_bwd":  0.0,
+                 "comm_bwd_type": "no-comm",
+                 "comm_size": 0,
+                 "total_mem_fwd": total_mem_fwd}
     #############################
     ####### backward pass #######
     #############################
@@ -214,7 +226,11 @@ def attend_estimates(b, l, q, h, element_size=4E-6, flops_units=1E-12):
                  "activation_out_mem": activation_out_mem,
                  "activation_buffer": activation_buffer,
                  'weights_mem': weights_mem, 
-                 'total_mem_fwd': total_mem_fwd}
+                 'total_mem_fwd': total_mem_fwd,
+                 "comm_fwd":  0.0,
+                 "comm_fwd_type": "no-comm",
+                 "comm_size": 0,
+                 "total_mem_fwd": total_mem_fwd}
 
     #############################
     ####### backward pass #######
@@ -228,7 +244,10 @@ def attend_estimates(b, l, q, h, element_size=4E-6, flops_units=1E-12):
     stats_bwd = {"flops_bwd": total_flops_bwd,
                  "activation_grad_mem": activation_grad_mem + activation_grad_mem_att,
                  "weights_grad_mem": 0,
-                 'total_mem_bwd': total_mem_bwd}
+                 'total_mem_bwd': total_mem_bwd,
+                 "comm_bwd":  0.0,
+                 "comm_bwd_type": "no-comm",
+                 "comm_size": 0}
     
     stats = {**stats_fwd, **stats_bwd}
     
