@@ -234,3 +234,121 @@ def attend_estimates(b, l, q, h, element_size=4E-6, flops_units=1E-12):
     
     return stats
 
+def fused_logit_softmax_dpr_attend_estimates(b, l, q, h, element_size=4E-6, flops_units=1E-12):
+    """
+    fused LA based on flashattention layer estimates
+    parameters: b: batch size
+                l: seq length
+                h: number of attention heads
+                e: embedding size
+                q: embedding dim/h
+                element_size: in MB
+
+    tensor shapes: input tensor: (b,h,l,q)
+                   output tensor: (b,h,l,q)
+
+    layer arithmetic:
+        define: q = e/h
+        forward pass:
+             A = Q * K^T
+             (b,h,l,l) = (b,h,l,q) * (b,h,q,l)
+             A = softmax(A)
+             (b,h,l,l) = (b,h,l,l)
+             A = random_mask(A)
+             (b,hl,l) = (b,hl,l)
+             Y = AV
+             (b,h,l,q) = (b,h,l,l) * (b,h,l,q)
+        backward pass:
+             dL/dK = dL/dA * Q
+             (b,h,l,q) = (b,h,l,l) * (b,h,l,q)
+             dL/dQ = dL/dA * K
+             (b,h,l,q) = (b,h,l,l) * (b,h,l,q)
+
+             dL/dX = Y . dL/dY - Y . sum(Y . dL/dY, axis=-1)
+             (b,h,l,l) = (b,h,l,l) . (b,h,l,l) - (b,h,l,l) . (b,h,l,1)
+
+             dl/dX = dl/dY * random_mask
+
+             dL/dA = dL/dY * V^T
+             (b,h,l,l) = (b,h,l,q) * (b,h,q,l)
+             dL/dV = A^T * dL/dY
+             (b,h,l,q) = (b,h,l,l) * (b,h,l,q) 
+        backward pass: 
+
+    comments:
+       assume it's a single operation/kernel
+    """
+    #############################
+    ####### forward pass ########
+    #############################
+    # can be different if complex numbers (drop for now)
+    flops_per_mult = 1 * flops_units
+    flops_per_add = 1 * flops_units
+    flops_per_exp = 1 * flops_units
+
+    # total flops
+    # logits
+    total_flops_fwd = b * h * l * l * (q * flops_per_mult + (q - 1) * flops_per_add)
+    # softmax
+    total_flops_fwd += b * h * l * l * (flops_per_exp + flops_per_mult) + (b * h * l * (l - 1)) * flops_per_add
+    # dropout
+    total_flops_fwd += (b * h * l * l) * flops_per_mult
+    # attend
+    total_flops_fwd += b * h * l * q * (l * flops_per_mult + (l - 1) * flops_per_add)
+
+    #total mem
+    activation_in_mem = (b * h * l * q) * element_size # Q
+    activation_in_other_mem = 2 * (b * h * l * q) * element_size # K and V
+    activation_in_other_mem += (b * h * l) * element_size # stats for softmax
+    activation_out_mem = (b * h * l * q) * element_size # result
+
+    activation_buffer = 3 * (b * h * l * q) * element_size # q, k, v 
+    activation_buffer += (b * h * l) * element_size # random number generator states (droppout mask is not stored); dont know if this is float
+    activation_buffer += (b * h * l) * element_size # stats for softmax
+    
+    # TODO: in software this might be stored (even though the next layer will have it: might need to revisit
+#    activation_buffer += (b * h * l * q) * element_size # result for flashattn bwd
+    weights_mem = 0
+    total_mem_fwd = activation_in_mem + activation_out_mem + activation_in_other_mem + weights_mem
+
+    # stats_fwd
+    stats_fwd = {"flops_fwd": total_flops_fwd,
+                 "activation_in_mem": activation_in_mem,
+                 "activation_in_other_mem": activation_in_other_mem,
+                 "activation_out_mem": activation_out_mem,
+                 "activation_buffer": activation_buffer,
+                 'weights_mem': weights_mem,
+                 'total_mem_fwd': total_mem_fwd}
+    #############################
+    ####### backward pass #######
+    #############################
+    # logits
+    total_flops_bwd = 2 * b * h * l * q * (l * flops_per_mult + (l - 1) * flops_per_add)
+    # softmax
+    total_flops_bwd += (2 * b * h * l * l) * flops_per_mult +  (b * h * l * (l - 1)) * flops_per_add + (b * h * l * l) * flops_per_add
+    # dropout
+    total_flops_bwd += b * h * l * l  * flops_per_mult
+    # attend
+    total_flops_bwd += b * h * l * l * (q * flops_per_mult + (q - 1) * flops_per_add)
+    total_flops_bwd += b * h * l * q * (l * flops_per_mult + (l - 1) * flops_per_add)
+
+    # extra fwd flops since attn is remat
+    # logit
+    total_flops_bwd +=  b * h * l * l * (q * flops_per_mult + (q - 1) * flops_per_add)
+    # softmax
+    total_flops_bwd += b * h * l * l * (flops_per_exp + flops_per_mult) + (b * h * l * (l - 1)) * flops_per_add
+    # dropout
+    total_flops_bwd += (b * h * l * l) * flops_per_mult
+
+    # mem
+    activation_grad_mem = 4 * (b * h * l * q) * element_size # dq, dk, dv, dresult
+    total_mem_bwd = activation_grad_mem + activation_buffer
+
+    stats_bwd = {"flops_bwd": total_flops_bwd,
+                 "activation_grad_mem": activation_grad_mem,
+                 "weights_grad_mem": 0,
+                 'total_mem_bwd': total_mem_bwd}
+
+    stats = {**stats_fwd, **stats_bwd}
+    return stats
+
