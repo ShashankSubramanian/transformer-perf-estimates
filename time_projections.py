@@ -32,18 +32,30 @@ def get_time_mem(mem, system={}):
     t_mem = mem / hbm_bandwidth
     return t_mem * 10**3
 
-def get_time_comm(vol, n_gpus=4, comm_type='allreduce', topology='nvlink', empirical=False, system={}):
-    # effective_vol / effective_bandwidth: need an analytical model
-    if np.isnan(vol): return 0
-
-    if empirical: assert system['nvlink_size'] <= 4, 'Empirical comms measurements not intended for nvlink_size > 4 currently'
-
-    if topology == 'nvlink': # use nvlink
-        t_comm  =  vol / nccl_bw_sigmoid(comm_type, vol, system['nvlink_size'], num_nodes=1) if empirical else vol / system['nvlink_bandwidth']
-    elif topology == 'ib':
-        t_comm  = vol / nccl_bw_sigmoid(comm_type, vol, system['nvlink_size'], num_nodes=n_gpus//system['nvlink_size']) if empirical else vol / system['ib_bandwidth'] 
+def get_time_comm(vols, n_gpuss=4, comm_types='allreduce', topologys='nvlink', empirical=False, system={}):
+    # TODO: incomplete
+    if isinstance(vols, list):
+        for vol,n_gpus,comm_type,topology in zip(vols,n_gpuss,comm_types,topologys):
+            if empirical: assert system['nvlink_size'] <= 4, 'Empirical comms measurements not intended for nvlink_size > 4 currently'
+            if topology == 'nvlink': # use nvlink
+                t_comm  +=  vol / nccl_bw_sigmoid(comm_type, vol, system['nvlink_size'], num_nodes=1) if empirical else vol / system['nvlink_bandwidth']
+            elif topology == 'ib':
+                t_comm  += vol / nccl_bw_sigmoid(comm_type, vol, system['nvlink_size'], num_nodes=n_gpus//system['nvlink_size']) if empirical else vol / system['ib_bandwidth'] 
+            else:
+                t_comm = 0
     else:
-        t_comm = 0
+        vol = vols
+        n_gpus = n_gpuss
+        comm_type = comm_types
+        topology = topologys
+        if np.isnan(vol): return 0
+        if empirical: assert system['nvlink_size'] <= 4, 'Empirical comms measurements not intended for nvlink_size > 4 currently'
+        if topology == 'nvlink': # use nvlink
+            t_comm  =  vol / nccl_bw_sigmoid(comm_type, vol, system['nvlink_size'], num_nodes=1) if empirical else vol / system['nvlink_bandwidth']
+        elif topology == 'ib':
+            t_comm  = vol / nccl_bw_sigmoid(comm_type, vol, system['nvlink_size'], num_nodes=n_gpus//system['nvlink_size']) if empirical else vol / system['ib_bandwidth'] 
+        else:
+            t_comm = 0
     return t_comm * 10**3
 
 def get_total_time(t_comp, t_comm, system={}, use_max=False):
