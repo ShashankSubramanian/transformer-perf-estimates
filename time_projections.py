@@ -34,13 +34,15 @@ def get_time_mem(mem, system={}):
 
 def get_time_comm(vols, n_gpuss=4, comm_types='allreduce', topologys='nvlink', empirical=False, system={}):
     # TODO: incomplete
+    t_comm = 0
     if isinstance(vols, list):
         for vol,n_gpus,comm_type,topology in zip(vols,n_gpuss,comm_types,topologys):
             if empirical: assert system['nvlink_size'] <= 4, 'Empirical comms measurements not intended for nvlink_size > 4 currently'
             if topology == 'nvlink': # use nvlink
                 t_comm  +=  vol / nccl_bw_sigmoid(comm_type, vol, system['nvlink_size'], num_nodes=1) if empirical else vol / system['nvlink_bandwidth']
             elif topology == 'ib':
-                t_comm  += vol / nccl_bw_sigmoid(comm_type, vol, system['nvlink_size'], num_nodes=n_gpus//system['nvlink_size']) if empirical else vol / system['ib_bandwidth'] 
+                t_comm  += vol / nccl_bw_sigmoid(comm_type, vol, system['nvlink_size'], num_nodes=n_gpus//system['nvlink_size']) if empirical else vol /  (system['ib_bandwidth'])
+
             else:
                 t_comm = 0
     else:
@@ -53,7 +55,7 @@ def get_time_comm(vols, n_gpuss=4, comm_types='allreduce', topologys='nvlink', e
         if topology == 'nvlink': # use nvlink
             t_comm  =  vol / nccl_bw_sigmoid(comm_type, vol, system['nvlink_size'], num_nodes=1) if empirical else vol / system['nvlink_bandwidth']
         elif topology == 'ib':
-            t_comm  = vol / nccl_bw_sigmoid(comm_type, vol, system['nvlink_size'], num_nodes=n_gpus//system['nvlink_size']) if empirical else vol / system['ib_bandwidth'] 
+            t_comm  = vol / nccl_bw_sigmoid(comm_type, vol, system['nvlink_size'], num_nodes=n_gpus//system['nvlink_size']) if empirical else vol / (system['ib_bandwidth'])
         else:
             t_comm = 0
     return t_comm * 10**3
@@ -64,11 +66,14 @@ def get_total_time(t_comp, t_comm, system={}, use_max=False):
     else:
         return t_comp + t_comm
 
-def get_topology(n_gpus, system={}):
-    if np.isnan(n_gpus): return None
-    has_nvlink = system['nvlink_size'] > 1
-    if has_nvlink:
-        topology =  ('nvlink' if n_gpus <= system['nvlink_size'] else 'ib')
-    else:
-        topology = 'ib'
-    return topology
+def get_topology(n_gpus, topology=np.nan, system={}):
+    if topology != topology: # hasnt been set (its not a list, string, and is set as NaN)
+        if np.isnan(n_gpus): return None
+        has_nvlink = system['nvlink_size'] > 1
+        if has_nvlink:
+            top =  ('nvlink' if n_gpus <= system['nvlink_size'] else 'ib')
+        else:
+            top = 'ib'
+        return top
+    else: # can be a list of tops or just 1 string
+        return topology

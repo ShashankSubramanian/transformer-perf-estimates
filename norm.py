@@ -6,9 +6,6 @@ import numpy as np
 
 def layer_norm_estimates(b, l, e, element_size=4E-6, flops_units=1E-12):
     """
-    TODO: parallelism incomplete!
-    my notes: all_gather after in fwd pass always (but is that true?) careful
-              reduce-scatter in bwd for first two certainly, the activation grad? careful
 
     layernorm layer estimates
     parameters: b: batch size
@@ -57,17 +54,14 @@ def layer_norm_estimates(b, l, e, element_size=4E-6, flops_units=1E-12):
 
     #total mem
     activation_in_mem = (b * l * e) * element_size
-    activation_in_other_mem  = 2 * (b * l) * element_size # mean and std
+    activation_in_mem += 2 * (b * l) * element_size # mean and std
     activation_out_mem = (b * l * e) * element_size
     activation_buffer = (b * l * e) * element_size
     weights_mem = 2 * e * element_size
-    total_mem_fwd = activation_in_mem + activation_out_mem + activation_in_other_mem + weights_mem
+    total_mem_fwd = activation_in_mem + activation_out_mem + weights_mem
 
     # stats_fwd
     stats_fwd = {"flops_fwd": total_flops_fwd,
-                 "activation_in_mem": activation_in_mem,
-                 "activation_in_other_mem": activation_in_other_mem,
-                 "activation_out_mem": activation_out_mem,
                  "activation_buffer": activation_buffer,
                  'weights_mem': weights_mem,
                  'total_mem_fwd': total_mem_fwd}
@@ -75,14 +69,13 @@ def layer_norm_estimates(b, l, e, element_size=4E-6, flops_units=1E-12):
     ####### backward pass #######
     #############################
     # little rough calcs, pretty sure some constant factor is off..
-    total_flops_bwd = 2 * (b * l * e * flops_per_mult + b * l * e * flops_per_add) # g,b
+    total_flops_bwd = b * l * e * flops_per_mult + 2 * b * l * e * flops_per_add # g,b
     total_flops_bwd += (5 * b * l * e * flops_per_mult) + (4 * b * l * (e - 1) * flops_per_add)
-    activation_grad_mem = 2 * (b * l * e) * element_size #dldy, dldx
+    activation_grad_mem = 4 * (b * l * e) * element_size #dldy*3, dldx
     weights_grad_mem = 2 * e * element_size
     total_mem_bwd = activation_grad_mem + weights_grad_mem + activation_buffer
 
     stats_bwd = {"flops_bwd": total_flops_bwd,
-                 "activation_grad_mem": activation_grad_mem,
                  "weights_grad_mem": weights_grad_mem,
                  'total_mem_bwd': total_mem_bwd}
 

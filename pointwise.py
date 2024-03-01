@@ -44,9 +44,6 @@ def nonlinear_act_estimates(b, l, e, element_size=4E-6, flops_units=1E-12):
     
     # stats_fwd
     stats_fwd = {"flops_fwd": total_flops_fwd, 
-                 "activation_in_mem": activation_in_mem, 
-                 "activation_in_other_mem": 0, 
-                 "activation_out_mem": activation_out_mem, 
                  "activation_buffer": activation_buffer,
                  'weights_mem': weights_mem, 
                  'total_mem_fwd': total_mem_fwd}
@@ -59,7 +56,6 @@ def nonlinear_act_estimates(b, l, e, element_size=4E-6, flops_units=1E-12):
     total_mem_bwd = activation_grad_mem + activation_buffer
     
     stats_bwd = {"flops_bwd": total_flops_bwd, 
-                 "activation_grad_mem": activation_grad_mem, 
                  "weights_grad_mem": 0, 
                  'total_mem_bwd': total_mem_bwd}
     
@@ -101,17 +97,14 @@ def dropout_estimates(b, l, e, element_size=4E-6, mask_element_size=1E-6, flops_
     
     #total mem
     activation_in_mem = (b * l * e) * element_size
-    activation_in_other_mem = (b * l * e) * mask_element_size
+    activation_in_mem += (b * l * e) * mask_element_size
     activation_out_mem = (b * l * e) * element_size
     activation_buffer = (b * l * e) * mask_element_size
     weights_mem = 0
-    total_mem_fwd = activation_in_mem + activation_out_mem + activation_in_other_mem + weights_mem
+    total_mem_fwd = activation_in_mem + activation_out_mem + weights_mem
     
     # stats_fwd
     stats_fwd = {"flops_fwd": total_flops_fwd, 
-                 "activation_in_mem": activation_in_mem, 
-                 "activation_in_other_mem": activation_in_other_mem, 
-                 "activation_out_mem": activation_out_mem, 
                  "activation_buffer": activation_buffer,
                  'weights_mem': weights_mem, 
                  'total_mem_fwd': total_mem_fwd}
@@ -124,14 +117,13 @@ def dropout_estimates(b, l, e, element_size=4E-6, mask_element_size=1E-6, flops_
     total_mem_bwd = activation_grad_mem + activation_buffer
     
     stats_bwd = {"flops_bwd": total_flops_bwd, 
-                 "activation_grad_mem": activation_grad_mem, 
                  "weights_grad_mem": 0, 
                  'total_mem_bwd': total_mem_bwd}
     
     stats = {**stats_fwd, **stats_bwd}
     return stats
 
-def softmax_estimates(b, l, h, element_size=4E-6, flops_units=1E-12):
+def softmax_estimates(b, l1, l2, h, element_size=4E-6, flops_units=1E-12):
     """
     dropout layer estimates
     parameters: b: batch size
@@ -139,11 +131,10 @@ def softmax_estimates(b, l, h, element_size=4E-6, flops_units=1E-12):
                 h: number of attention heads
                 element_size: in MB
     
-    tensor shapes: input tensor: (b,h,l,q)
-                   output tensor: (b,h,l,q)
+    tensor shapes: input tensor: (b,h,l,l)
+                   output tensor: (b,h,l,l)
                    
     layer arithmetic: 
-        define: q = e/h
         forward pass: 
              Y = softmax(X)
              (b,h,l,l) = (b,h,l,l)
@@ -162,33 +153,28 @@ def softmax_estimates(b, l, h, element_size=4E-6, flops_units=1E-12):
     flops_per_exp = 1 * flops_units
 
     # total flops
-    total_flops_fwd = b * h * l * l * (flops_per_exp + flops_per_mult) + (b * h * l * (l - 1)) * flops_per_add
+    total_flops_fwd = b * h * l1 * l2 * (flops_per_exp + flops_per_mult) + (b * h * l1 * (l2 - 1)) * flops_per_add
     
     #total mem
-    activation_in_mem = (b * h * l * l) * element_size
-    activation_in_other_mem = 0
-    activation_out_mem = (b * h * l * l) * element_size
-    activation_buffer = (b * h * l * l) * element_size
+    activation_in_mem = (b * h * l1 * l2) * element_size
+    activation_out_mem = (b * h * l1 * l2) * element_size
+    activation_buffer = (b * h * l1 * l2) * element_size
     weights_mem = 0
-    total_mem_fwd = activation_in_mem + activation_out_mem + activation_in_other_mem + weights_mem
+    total_mem_fwd = activation_in_mem + activation_out_mem + weights_mem
     
     # stats_fwd
     stats_fwd = {"flops_fwd": total_flops_fwd, 
-                 "activation_in_mem": activation_in_mem, 
-                 "activation_in_other_mem": activation_in_other_mem, 
-                 "activation_out_mem": activation_out_mem, 
                  "activation_buffer": activation_buffer,
                  'weights_mem': weights_mem, 
                  'total_mem_fwd': total_mem_fwd}
     #############################
     ####### backward pass #######
     #############################
-    total_flops_bwd =  (2 * b * h * l * l) * flops_per_mult +  (b * h * l * (l - 1)) * flops_per_add + (b * h * l * l) * flops_per_add
-    activation_grad_mem = 2 * (b * h * l * l) * element_size
+    total_flops_bwd =  (2 * b * h * l1 * l2) * flops_per_mult +  (b * h * l1 * (l2 - 1)) * flops_per_add + (b * h * l1 * l2) * flops_per_add
+    activation_grad_mem = 2 * (b * h * l1 * l2) * element_size
     total_mem_bwd = activation_grad_mem + activation_buffer
     
     stats_bwd = {"flops_bwd": total_flops_bwd, 
-                 "activation_grad_mem": activation_grad_mem, 
                  "weights_grad_mem": 0, 
                  'total_mem_bwd': total_mem_bwd}
     
