@@ -836,7 +836,7 @@ class Logits(Estimates):
                 A = Q * K^T
                 (b,h,l,l) = (b,h,l,q) * (b,h,q,l)
             backward pass:
-                dL/dK = dL/dA * Q
+                dL/dK = dL/dA^T * Q
                 (b,h,l,q) = (b,h,l,l) * (b,h,l,q)
                 dL/dQ = dL/dA * K
                 (b,h,l,q) = (b,h,l,l) * (b,h,l,q)
@@ -968,7 +968,7 @@ class LogitsSumma(Estimates):
                 A = Q * K^T
                 (b,h,l/m2,l/m1) = (b,h,l/m2,q/m1) * (b,h,l/m2,q/m1)^T
             backward pass:
-                dL/dK = dL/dA * Q
+                dL/dK = dL/dA^T * Q
                 (b,h,l/m2,q/m1) = (b,h,l/m2,l/m1) * (b,h,l/m2,q/m1)
                 dL/dQ = dL/dA * K
                 (b,h,l/m2,q/m1) = (b,h,l/m2,l/m1) * (b,h,l/m2,q/m1)
@@ -1015,17 +1015,21 @@ class LogitsSumma(Estimates):
         comm_fwd_topology = [t2, t1]
 
         ####### backward pass #######
-        # broadcast bh,l/m2,l/nb rowwise and bh,l/nb,q/m1 colwise, admm locally
-        flops_bwd = 2 * b * h * l_local_2 * q_local * (l * flops_per_mult + (l - 1) * flops_per_add)
+        # dl/dq:  broadcast bh,l/m2,l/nb rowwise and bh,l/nb,q/m1 colwise, admm locally
+        flops_bwd = b * h * l_local_2 * q_local * (l * flops_per_mult + (l - 1) * flops_per_add)
+        # dl/dk:  broadcast bh,l/m2,l/nb rowwise 
+        flops_bwd += b * h * l * q_local * (l_local_2 * flops_per_mult + (l_local_2 - 1) * flops_per_add)
         mem_bwd = (2 * b * h * l_local_2 * l + 2 * b * h * l * q_local + 2 * b * h * l_local_2 * q_local * nb) * element_size
 
         # sync/comm layers
         # broadcast bh,l/m2,l/nb rowwise and bh,l/nb,q/m1 colwise, admm locally
-        comm_bwd = [m1_parallel * (2 * b * h * l_local_2 * l) * element_size,
-                     m2_parallel * (2 * b * h * l * q_local) * element_size]
-        comm_bwd_type = ["broadcast", "broadcast"]
-        comm_bwd_size = [m1, m2]
-        comm_bwd_topology = [t1, t2]
+        comm_bwd = [m1_parallel * (b * h * l_local_2 * l) * element_size,
+                    m2_parallel * (b * h * l * q_local) * element_size,
+                    m1_parallel * (b * h * l_local_2 * l) * element_size,
+                    m2_parallel * (b * h * l * q_local) * element_size]
+        comm_bwd_type = ["broadcast", "broadcast", "broadcast", "reduce"]
+        comm_bwd_size = [m1, m2, m1, m2]
+        comm_bwd_topology = [t1, t2, t1, t2]
 
         self.set_stats(name,
                        flops_fwd = flops_fwd,
