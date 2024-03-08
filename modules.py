@@ -231,7 +231,7 @@ def sa_1d(b, l, e, h, depth, parallelism={'m': 1}, topology={'t': 'nvlink'}, fla
         logits = Logits('logits', b, l, (e // h), h, parallelism={'dim1': m}, topology={'t1': t})
         summary.append(logits.get_stats())
         ######################################################################################################################################################
-        softmax = Softmax('softmax', b, l, l, h, parallelism={'dim1': m}, topology={'t1': t})
+        softmax = Softmax('softmax', b, h, l, l, parallelism={'dim1': m}, topology={'t1': t})
         summary.append(softmax.get_stats())
         ######################################################################################################################################################
         dpr_at = DropOut('dpr_at', b * (h // m) * l * l)
@@ -322,7 +322,7 @@ def sa_2d(b, l, e, h, depth, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'no
     logits = LogitsSumma('logits', b, l, (e // h), h, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
     summary.append(logits.get_stats())
     ######################################################################################################################################################
-    softmax = Softmax2D('softmax', b, l, l, h, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    softmax = Softmax2D('softmax', b, h, l, l, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
     summary.append(softmax.get_stats())
     ######################################################################################################################################################
     dpr_at = DropOut('dpr_at', b * h * (l // m2) * (l // m1))
@@ -345,3 +345,4 @@ def sa_2d(b, l, e, h, depth, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'no
     ######################################################################################################################################################
 
     return pd.DataFrame(summary)
+
