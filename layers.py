@@ -1234,6 +1234,262 @@ class AttendSumma(Estimates):
         self.compute_time()
         return self.stats
 
+class LogitsSeqp(Estimates):
+    def __init__(self, name, b, l, q, h, 
+                 parallelism={'dim1': 1, 'dim2': 1}, 
+                 topology={'dim1': 'none', 'dim2': 'none'}):
+        """
+        logit layer estimates
+        parameters: b: batch size
+                    l: seq length
+                    h: number of attention heads
+                    q: embedding dim/h
+                    element_size: in MB
+
+        forward pass:
+             A = Q * K^T
+             (b,h/m1,l/m2,l) = (b,h/m1,l/m2,q) * (b,h/m1,q,l)
+        backward pass:
+             dL/dK = dL/dA^T * Q
+             (b,h/m1,l/m2,q) = (b,h/m1,l,l/m2) * (b,h/m1,l/m2,q)
+             dL/dQ = dL/dA * K
+             (b,h/m1,l/m2,q) = (b,h/m1,l/m2,l) * (b,h/m1,l,q)
+        comments:
+        """
+
+        super().__init__()
+        
+        flops_per_mult = 1 * self.flops_units
+        flops_per_add = 1 * self.flops_units
+        element_size = self.element_size
+
+        m2 = parallelism['dim1']
+        m1 = parallelism['dim2']
+        t2 = topology['t1']
+        t1 = topology['t2']
+        m1_parallel = (m1 > 1)
+        m2_parallel = (m2 > 1)
+
+        l_local = l // m2
+        h_local = h // m1
+
+        # total flops
+        flops_fwd = b * h_local * l_local * l * (q * flops_per_mult + (q - 1) * flops_per_add)
+
+        #total mem
+        activation_in_mem = (b * h_local * l_local * q) * element_size
+        activation_in_mem += (b * h_local * l * q) * element_size
+        activation_out_mem = (b * h_local * l_local * l) * element_size
+        activation_buffer = 2 * (b * h_local * l_local * q) * element_size # Q and K
+        mem_fwd = activation_in_mem + activation_out_mem
+
+        # sync/comm layers
+        comm_fwd = m2_parallel * (b * h_local * l * q) * element_size
+        comm_fwd_type = "allgather"
+        comm_fwd_size = m2
+        comm_fwd_topology = t2
+
+        ####### backward pass #######
+        flops_bwd = b * h_local * l_local * q * (l * flops_per_mult + (l - 1) * flops_per_add)
+        flops_bwd += b * h_local * l * q * (l_local * flops_per_mult + (l_local - 1) * flops_per_add)
+        activation_grad_mem = (b * h_local * l_local * q + b * h_local * l * q) * element_size
+        activation_grad_mem_att = 2 * (b * h_local * l_local * l) * element_size
+        mem_bwd = activation_grad_mem + activation_grad_mem_att + activation_buffer
+
+        comm_bwd = [m2_parallel * (b * h_local * l * q) * element_size,
+                    m2_parallel * (b * h_local * l * q) * element_size]
+        comm_bwd_type = ["allgather", "reducescatter"]
+        comm_bwd_size = [m2, m2]
+        comm_bwd_topology = [t2, t2] 
+
+        self.set_stats(name,
+                       flops_fwd = flops_fwd,
+                       use_tensor_cores = True,
+                       mem_fwd = mem_fwd,
+                       activation_buffer = activation_buffer,
+                       weights_mem = 0,
+                       weights_grad_mem = 0,
+                       comm_fwd = comm_fwd, 
+                       comm_fwd_type = comm_fwd_type,
+                       comm_fwd_size = comm_fwd_size,
+                       comm_fwd_topology = comm_fwd_topology,
+                       flops_bwd = flops_bwd,
+                       mem_bwd = mem_bwd,
+                       comm_bwd = comm_bwd, 
+                       comm_bwd_type = comm_bwd_type,
+                       comm_bwd_size = comm_bwd_size,
+                       comm_bwd_topology = comm_bwd_topology)
+
+
+    def compute_times(self, flops, mem, comms, comm_sizes, comm_types, comm_tops):
+        t_comp = self.get_time_flops(flops)
+        t_mem  = self.get_time_mem(mem)
+        t_compute = max(t_comp, t_mem)
+        intensity = t_comp / t_mem
+
+        t_comm = 0
+        if isinstance(comms, list):
+            for c, comm in enumerate(comms):
+                comm_size = comm_sizes[c]
+                comm_type = comm_types[c]
+                comm_top = comm_tops[c]
+                t_comm += self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+        else:
+            t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
+
+        t = t_compute + t_comm
+        return t, t_comm, intensity
+
+    def compute_time(self): # overwrite due to diff comm patterns
+        # forward time
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd,
+                                                                                                             self.mem_fwd,
+                                                                                                             self.comm_fwd,
+                                                                                                             self.comm_fwd_size,
+                                                                                                             self.comm_fwd_type,
+                                                                                                             self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd,
+                                                                                                             self.mem_bwd,
+                                                                                                             self.comm_bwd,
+                                                                                                             self.comm_bwd_size,
+                                                                                                             self.comm_bwd_type,
+                                                                                                             self.comm_bwd_topology)
+        self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
+
+
+    def get_stats(self):
+        self.compute_time()
+        return self.stats
+
+class AttendSeqp(Estimates):
+    def __init__(self, name, b, l, q, h, 
+                 parallelism={'dim1': 1, 'dim2': 1}, 
+                 topology={'dim1': 'none', 'dim2': 'none'}):
+        """
+        attend layer estimates
+        parameters: b: batch size
+                    l: seq length
+                    h: number of attention heads
+                    q: embedding dim/h
+                    element_size: in MB
+
+                    
+        layer arithmetic: 
+            assume h = h/m1
+            forward pass :  
+                Y = AV
+                (b,h,l/m2,q) = (b,h,l/m2,l) * (b,h,l/m2,q)
+            backward pass: (L = loss)
+                dL/dA = dL/dY * V^T
+                (b,h,l/m2,l) = (b,h,l/m2,q) * (b,h,q,l/m2)
+                dL/dV = A^T * dL/dY
+                (b,h,l/m2,q) = (b,h,l,l/m2) * (b,h,l/m2,q) 
+        comments:
+        """
+
+        super().__init__()
+        
+        flops_per_mult = 1 * self.flops_units
+        flops_per_add = 1 * self.flops_units
+        element_size = self.element_size
+
+        m2 = parallelism['dim1']
+        m1 = parallelism['dim2']
+        t2 = topology['t1']
+        t1 = topology['t2']
+        m1_parallel = (m1 > 1)
+        m2_parallel = (m2 > 1)
+
+        l_local = l // m2
+        h_local = h // m1
+        flops_fwd = b * h_local * l_local * q * (l * flops_per_mult + (l - 1) * flops_per_add)
+            
+        # total mem
+        activation_in_mem = (b * h_local * l_local * l) * element_size
+        activation_in_mem += (b * h_local * l * q) * element_size
+        activation_out_mem = (b * h_local * l_local * q) * element_size
+        activation_buffer = (b * h_local * l_local * l) * element_size # store for bwd pass
+        activation_buffer += (b * h_local * l_local * q) * element_size # store for bwd pass
+        mem_fwd = activation_in_mem + activation_out_mem
+
+        # sync/comm layers
+        comm_fwd = m2_parallel * (b * h_local * l * q) * element_size
+        comm_fwd_type = "allgather"
+        comm_fwd_size = m2
+        comm_fwd_topology = t2
+
+        flops_bwd = b * h_local * l_local * l * (q * flops_per_mult + (q - 1) * flops_per_add)
+        flops_bwd += b * h_local * l * q * (l_local * flops_per_mult + (l_local - 1) * flops_per_add)
+        activation_grad_mem = 2 * (b * h_local * l_local * q) * element_size + (b * h_local * l_local * q) * element_size
+        activation_grad_mem_att = (b * h_local * l_local * l) * element_size
+        buffers_with_gather = b * h_local * (l_local * l + l * q) * element_size # attention and values (this is allgathered)
+        mem_bwd = activation_grad_mem + activation_grad_mem_att  + buffers_with_gather
+
+        comm_bwd = [m2_parallel * (b * h_local * l * q) * element_size,
+                    m2_parallel * (b * h_local * l * q) * element_size]
+        comm_bwd_type = ["allgather", "reducescatter"] # reducescatter for dl(dKV)
+        comm_bwd_size = [m2, m2]
+        comm_bwd_topology = [t2, t2] 
+
+        self.set_stats(name,
+                       flops_fwd = flops_fwd,
+                       use_tensor_cores = True,
+                       mem_fwd = mem_fwd,
+                       activation_buffer = activation_buffer,
+                       weights_mem = 0,
+                       weights_grad_mem = 0,
+                       comm_fwd = comm_fwd, 
+                       comm_fwd_type = comm_fwd_type,
+                       comm_fwd_size = comm_fwd_size,
+                       comm_fwd_topology = comm_fwd_topology,
+                       flops_bwd = flops_bwd,
+                       mem_bwd = mem_bwd,
+                       comm_bwd = comm_bwd, 
+                       comm_bwd_type = comm_bwd_type,
+                       comm_bwd_size = comm_bwd_size,
+                       comm_bwd_topology = comm_bwd_topology)
+
+
+    def compute_times(self, flops, mem, comms, comm_sizes, comm_types, comm_tops):
+        t_comp = self.get_time_flops(flops)
+        t_mem  = self.get_time_mem(mem)
+        t_compute = max(t_comp, t_mem)
+        intensity = t_comp / t_mem
+
+        t_comm = 0
+        if isinstance(comms, list):
+            for c, comm in enumerate(comms):
+                comm_size = comm_sizes[c]
+                comm_type = comm_types[c]
+                comm_top = comm_tops[c]
+                t_comm += self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+        else:
+            t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
+
+        t = t_compute + t_comm
+        return t, t_comm, intensity
+
+    def compute_time(self): # overwrite due to diff comm patterns
+        # forward time
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd,
+                                                                                                             self.mem_fwd,
+                                                                                                             self.comm_fwd,
+                                                                                                             self.comm_fwd_size,
+                                                                                                             self.comm_fwd_type,
+                                                                                                             self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd,
+                                                                                                             self.mem_bwd,
+                                                                                                             self.comm_bwd,
+                                                                                                             self.comm_bwd_size,
+                                                                                                             self.comm_bwd_type,
+                                                                                                             self.comm_bwd_topology)
+        self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
+
+
+    def get_stats(self):
+        self.compute_time()
+        return self.stats
+
 class FusedLA(Estimates):
     def __init__(self, name, b, l, q, h, 
                  parallelism={'dim1': 1}, 
