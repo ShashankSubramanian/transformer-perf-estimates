@@ -1,0 +1,16 @@
+{
+    "matrix_flops_fp16": 312,
+    "vector_flops_fp32": 19.5,
+    "vector_flops_fp16": 78,
+    "hbm_bandwidth": 1555,
+    "nvlink_bandwidth": 300,
+    "ib_bandwidth": 100,
+    "ib_latency": 0.000043,
+    "nvlink_size": 4,
+    "nvlink_latency": 0.000066,
+    "empirical": false,
+    "formula": true,
+    "element_size": 2E-9,
+    "mask_element_size": 1E-9,
+    "flops_units": 1E-12
+}
