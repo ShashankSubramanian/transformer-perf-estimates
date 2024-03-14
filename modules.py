@@ -160,13 +160,14 @@ def mlp_2d(b, l, e, f, depth, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'n
 
     return pd.DataFrame(summary)
 
-def sa_1d(b, l, e, h, depth, parallelism={'m': 1}, topology={'t': 'nvlink'}, flash_attention=True):
+def sa_1d(b, l, e, h, depth, parallelism={'m': 1}, topology={'t': 'nvlink'}, flash_attention=False, attention_recompute=False):
     """
     parameters: b: batch size
                 l: seq length
                 e: embedding dim/hidden dim
                 h: number of attention heads
                 element_size: in MB
+
 
     tensor shapes: input tensor: (b,l,e)
                    output tensor: (b,l,e)
@@ -211,6 +212,10 @@ def sa_1d(b, l, e, h, depth, parallelism={'m': 1}, topology={'t': 'nvlink'}, fla
              (b,l/m,e) = (b,l/m,e)
              Y = norm(Y)
              (b,l/m,e) = (b,l/m,e)
+
+        comments: use either flash attention or attention recompute
+        for attention recompute, we recompute logits, softmax, dpr 
+        to get the attention matrix in the attend layer
     """
 
 
@@ -228,16 +233,18 @@ def sa_1d(b, l, e, h, depth, parallelism={'m': 1}, topology={'t': 'nvlink'}, fla
         ######################################################################################################################################################
     else:
         ######################################################################################################################################################
-        logits = Logits('logits', b, l, (e // h), h, parallelism={'dim1': m}, topology={'t1': t})
+        # need to recompute logits if checkpointed, Q/K still stored
+        logits = Logits('logits', b, l, (e // h), h, parallelism={'dim1': m}, topology={'t1': t}, recompute=attention_recompute)
         summary.append(logits.get_stats())
         ######################################################################################################################################################
-        softmax = Softmax('softmax', b, h, l, l, parallelism={'dim1': m}, topology={'t1': t})
+        # need to recompute softmax if checkpointed, don't store input attention 
+        softmax = Softmax('softmax', b, h, l, l, parallelism={'dim1': m}, topology={'t1': t}, recompute=attention_recompute, remat=attention_recompute)
         summary.append(softmax.get_stats())
         ######################################################################################################################################################
-        dpr_at = DropOut('dpr_at', b * (h // m) * l * l)
+        dpr_at = DropOut('dpr_at', b * (h // m) * l * l, recompute=attention_recompute, remat=attention_recompute)
         summary.append(dpr_at.get_stats())
         ######################################################################################################################################################
-        attend = Attend('attend', b, l, (e // h), h, parallelism={'dim1': m}, topology={'t1': t})
+        attend = Attend('attend', b, l, (e // h), h, parallelism={'dim1': m}, topology={'t1': t}, remat=attention_recompute)
         summary.append(attend.get_stats())
         ######################################################################################################################################################
     vproj = Linear('vproj', b, l, e, e, parallelism={'dim1': m, 'dim2': 1}, topology={'t1': t, 't2': 'none'})

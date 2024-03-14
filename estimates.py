@@ -33,7 +33,9 @@ class Estimates():
                   comm_bwd = 0, 
                   comm_bwd_type = 'none',
                   comm_bwd_size = 0,
-                  comm_bwd_topology = 'none'):
+                  comm_bwd_topology = 'none',
+                  recompute = False,
+                  remat = False):
         self.name = name
         self.use_tensor_cores = use_tensor_cores
         self.flops_fwd = flops_fwd
@@ -51,13 +53,14 @@ class Estimates():
         self.comm_bwd_type = comm_bwd_type
         self.comm_bwd_size = comm_bwd_size
         self.comm_bwd_topology = comm_bwd_topology
+        self.recompute = recompute # do fwd pass again
 
         # what to see 
         self.stats = {"name": self.name,
                       "weights_mem": self.weights_mem,
                       "weights_grad_mem": self.weights_grad_mem,
                       "flops_fwd": self.flops_fwd,
-                      "activation_buffer": self.activation_buffer,
+                      "activation_buffer": self.activation_buffer * (not remat),
                       "comm_fwd": self.comm_fwd,
                       "comm_fwd_type": self.comm_fwd_type,
                       "flops_bwd": self.flops_bwd,
@@ -81,6 +84,8 @@ class Estimates():
         self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.get_time(self.flops_bwd, self.mem_bwd, 
                                                                                      self.comm_bwd, self.comm_bwd_size,
                                                                                      self.comm_bwd_type, self.comm_bwd_topology)
+        if self.recompute:
+            self.stats['t_bwd'] += self.stats['t_fwd']
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 

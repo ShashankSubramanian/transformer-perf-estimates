@@ -402,7 +402,7 @@ class Act(Estimates):
         return self.stats
 
 class DropOut(Estimates):
-    def __init__(self, name, m):
+    def __init__(self, name, m, recompute=False, remat=False):
         """
         dropout function estimates
         parameters: m: size of act
@@ -446,7 +446,9 @@ class DropOut(Estimates):
                        weights_mem = 0,
                        weights_grad_mem = 0,
                        flops_bwd = flops_bwd,
-                       mem_bwd = mem_bwd)
+                       mem_bwd = mem_bwd,
+                       recompute = recompute,
+                       remat = remat)
 
     def get_stats(self):
         self.compute_time()
@@ -455,7 +457,7 @@ class DropOut(Estimates):
 class Softmax(Estimates):
     def __init__(self, name, b, h, l1, l2,
                  parallelism={'dim1': 1,}, 
-                 topology={'dim1': 'none'}):
+                 topology={'dim1': 'none'}, recompute=False, remat=False):
         """
         softmax  function estimates
         parameters: b: batch size
@@ -509,7 +511,9 @@ class Softmax(Estimates):
                        weights_mem = 0,
                        weights_grad_mem = 0,
                        flops_bwd = flops_bwd,
-                       mem_bwd = mem_bwd)
+                       mem_bwd = mem_bwd,
+                       recompute = recompute,
+                       remat = remat)
 
     def get_stats(self):
         self.compute_time()
@@ -518,7 +522,7 @@ class Softmax(Estimates):
 class Softmax2D(Estimates):
     def __init__(self, name, b, h, l1, l2,
                  parallelism={'dim1': 1, 'dim2': 1}, 
-                 topology={'dim1': 'none', 'dim2': 'none'}):
+                 topology={'dim1': 'none', 'dim2': 'none'}, recompute=False, remat=False):
         """
         softmax  function estimates
         parameters: b: batch size
@@ -596,7 +600,9 @@ class Softmax2D(Estimates):
                        comm_bwd = comm_bwd, 
                        comm_bwd_type = comm_bwd_type,
                        comm_bwd_size = comm_bwd_size,
-                       comm_bwd_topology = comm_bwd_topology)
+                       comm_bwd_topology = comm_bwd_topology,
+                       recompute = recompute,
+                       remat = remat)
 
     def get_stats(self):
         self.compute_time()
@@ -819,7 +825,7 @@ class LayerNorm2D(Estimates):
 class Logits(Estimates):
     def __init__(self, name, b, l, q, h, 
                  parallelism={'dim1': 1}, 
-                 topology={'dim1': 'none'}):
+                 topology={'dim1': 'none'}, recompute=False):
         """
         logits layer estimates
         parameters: b: batch size
@@ -878,7 +884,8 @@ class Logits(Estimates):
                        weights_mem = 0,
                        weights_grad_mem = 0,
                        flops_bwd = flops_bwd,
-                       mem_bwd = mem_bwd)
+                       mem_bwd = mem_bwd,
+                       recompute = recompute)
 
     def get_stats(self):
         self.compute_time()
@@ -887,7 +894,7 @@ class Logits(Estimates):
 class Attend(Estimates):
     def __init__(self, name, b, l, q, h, 
                  parallelism={'dim1': 1}, 
-                 topology={'dim1': 'none'}):
+                 topology={'dim1': 'none'}, remat=False):
         """
         attend layer estimates
         parameters: b: batch size
@@ -925,8 +932,8 @@ class Attend(Estimates):
         activation_in_mem =  (b * h_local * l * l) * element_size
         activation_in_mem += (b * h_local * l * q) * element_size
         activation_out_mem = (b * h_local * l * q) * element_size
-        activation_buffer =  (b * h_local * l * l) * element_size # store for bwd pass
-        activation_buffer += (b * h_local * l * q) * element_size # store for bwd pass
+        activation_buffer1 =  (b * h_local * l * l) * element_size # store for bwd pass
+        activation_buffer2 = (b * h_local * l * q) * element_size # store for bwd pass
         mem_fwd = activation_in_mem + activation_out_mem
 
         ####### backward pass #######
@@ -934,7 +941,10 @@ class Attend(Estimates):
         flops_bwd += b * h_local * l * q * (l * flops_per_mult + (l - 1) * flops_per_add)
         activation_grad_mem = 3 * (b * h_local * l * q) * element_size
         activation_grad_mem_att = (b * h_local * l * l) * element_size
-        mem_bwd = activation_grad_mem + activation_grad_mem_att + activation_buffer
+        mem_bwd = activation_grad_mem + activation_grad_mem_att + activation_buffer1 + activation_buffer2
+        
+        activation_buffer1 *= (not remat) # this buffer is released if remat
+        activation_buffer = activation_buffer1 + activation_buffer2
 
         self.set_stats(name,
                        flops_fwd = flops_fwd,
@@ -953,7 +963,7 @@ class Attend(Estimates):
 class LogitsSumma(Estimates):
     def __init__(self, name, b, l, q, h, 
                  parallelism={'dim1': 1, 'dim2': 1}, 
-                 topology={'dim1': 'none', 'dim2': 'none'}):
+                 topology={'dim1': 'none', 'dim2': 'none'}, recompute=False):
         """
         logit layer estimates
         parameters: b: batch size
@@ -1047,7 +1057,8 @@ class LogitsSumma(Estimates):
                        comm_bwd = comm_bwd, 
                        comm_bwd_type = comm_bwd_type,
                        comm_bwd_size = comm_bwd_size,
-                       comm_bwd_topology = comm_bwd_topology)
+                       comm_bwd_topology = comm_bwd_topology,
+                       recompute = recompute)
 
 
     def compute_time_summa(self, flops, mem, comms, comm_sizes, comm_types, comm_tops):
@@ -1095,7 +1106,7 @@ class LogitsSumma(Estimates):
 class AttendSumma(Estimates):
     def __init__(self, name, b, l, q, h, 
                  parallelism={'dim1': 1, 'dim2': 1}, 
-                 topology={'dim1': 'none', 'dim2': 'none'}):
+                 topology={'dim1': 'none', 'dim2': 'none'}, remat=False):
         """
         attend layer estimates
         parameters: b: batch size
@@ -1138,7 +1149,7 @@ class AttendSumma(Estimates):
         flops_fwd = b * h * l_local_2 * q_local * (l * flops_per_mult + l * flops_per_add) # l outer products and l addns in total
         
         # total mem
-        activation_buffer = (b * h * l_local_2 * l_local_1 + b * h * l_local_2 * q_local) * element_size # store for bwd pass
+        activation_buffer = (b * h * l_local_2 * l_local_1 * (not remat) + b * h * l_local_2 * q_local) * element_size # store for bwd pass
         weights_mem = 0 
         # careful, nb is arbitrarily chosen here
         nb = l // 512 if m1 != m2 else m1
@@ -1237,7 +1248,7 @@ class AttendSumma(Estimates):
 class LogitsSeqp(Estimates):
     def __init__(self, name, b, l, q, h, 
                  parallelism={'dim1': 1, 'dim2': 1}, 
-                 topology={'dim1': 'none', 'dim2': 'none'}):
+                 topology={'dim1': 'none', 'dim2': 'none'}, recompute=False):
         """
         logit layer estimates
         parameters: b: batch size
@@ -1318,7 +1329,8 @@ class LogitsSeqp(Estimates):
                        comm_bwd = comm_bwd, 
                        comm_bwd_type = comm_bwd_type,
                        comm_bwd_size = comm_bwd_size,
-                       comm_bwd_topology = comm_bwd_topology)
+                       comm_bwd_topology = comm_bwd_topology,
+                       recompute = recompute)
 
 
     def compute_times(self, flops, mem, comms, comm_sizes, comm_types, comm_tops):
@@ -1364,7 +1376,7 @@ class LogitsSeqp(Estimates):
 class AttendSeqp(Estimates):
     def __init__(self, name, b, l, q, h, 
                  parallelism={'dim1': 1, 'dim2': 1}, 
-                 topology={'dim1': 'none', 'dim2': 'none'}):
+                 topology={'dim1': 'none', 'dim2': 'none'}, remat=False):
         """
         attend layer estimates
         parameters: b: batch size
@@ -1408,7 +1420,7 @@ class AttendSeqp(Estimates):
         activation_in_mem = (b * h_local * l_local * l) * element_size
         activation_in_mem += (b * h_local * l * q) * element_size
         activation_out_mem = (b * h_local * l_local * q) * element_size
-        activation_buffer = (b * h_local * l_local * l) * element_size # store for bwd pass
+        activation_buffer = (b * h_local * l_local * l) * element_size * (not remat)# store for bwd pass
         activation_buffer += (b * h_local * l_local * q) * element_size # store for bwd pass
         mem_fwd = activation_in_mem + activation_out_mem
 
