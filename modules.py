@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from layers import *
 
-def mlp_1d(b, l, e, f, depth, parallelism={'m': 1}, topology={'t': 'nvlink'}):
+def mlp_1d(b, l, e, f, parallelism={'m': 1}, topology={'t': 'nvlink'}, system=None):
     """
     MLP layer estimates
     parameters: b: batch size
@@ -53,34 +53,34 @@ def mlp_1d(b, l, e, f, depth, parallelism={'m': 1}, topology={'t': 'nvlink'}):
     t = topology['t']
 
     ######################################################################################################################################################
-    fc1 = Linear('fc1', b, l, e, f, parallelism={'dim1': 1, 'dim2': m}, topology={'t1': 'none', 't2': t})
+    fc1 = Linear('fc1', b, l, e, f, parallelism={'dim1': 1, 'dim2': m}, topology={'t1': 'none', 't2': t}, system=system)
     summary.append(fc1.get_stats())
     ######################################################################################################################################################
-    fc1_bias = Bias('fc1-bias', b, l, f, parallelism={'dim1': 1, 'dim2': m}, topology={'t1': 'none', 't2': t})
+    fc1_bias = Bias('fc1-bias', b, l, f, parallelism={'dim1': 1, 'dim2': m}, topology={'t1': 'none', 't2': t}, system=system)
     summary.append(fc1_bias.get_stats())
     ######################################################################################################################################################
-    act1 = Act('act1', b * l * (f // m))
+    act1 = Act('act1', b * l * (f // m), system=system)
     summary.append(act1.get_stats())
     ######################################################################################################################################################
-    dpr1 = DropOut('dpr1', b * l * (f // m))
+    dpr1 = DropOut('dpr1', b * l * (f // m), system=system)
     summary.append(dpr1.get_stats())
     ######################################################################################################################################################
-    fc2 = Linear('fc2', b, l, f, e, parallelism={'dim1': m, 'dim2': 1}, topology={'t1': t, 't2': 'none'})
+    fc2 = Linear('fc2', b, l, f, e, parallelism={'dim1': m, 'dim2': 1}, topology={'t1': t, 't2': 'none'}, system=system)
     summary.append(fc2.get_stats())
     ######################################################################################################################################################
-    fc2_bias = Bias('fc2-bias', b, l, e, parallelism={'dim1': 1, 'dim2': 1}, topology={'t1': 'none', 't2': 'none'})
+    fc2_bias = Bias('fc2-bias', b, l, e, parallelism={'dim1': 1, 'dim2': 1}, topology={'t1': 'none', 't2': 'none'}, system=system)
     summary.append(fc2_bias.get_stats())
     ######################################################################################################################################################
-    dpr2 = DropOut('dpr2', b * (l // m) * e)
+    dpr2 = DropOut('dpr2', b * (l // m) * e, system=system)
     summary.append(dpr2.get_stats())
     ######################################################################################################################################################
-    ln1 = LayerNorm('ln1', b, l, e, parallelism={'dim1': m}, topology={'t1': t})
+    ln1 = LayerNorm('ln1', b, l, e, parallelism={'dim1': m}, topology={'t1': t}, system=system)
     summary.append(ln1.get_stats())
     ######################################################################################################################################################
 
     return pd.DataFrame(summary)
 
-def mlp_2d(b, l, e, f, depth, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 't2': 'none'}):
+def mlp_2d(b, l, e, f, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 't2': 'none'}, system=None):
     """
     MLP layer estimates
     parameters: b: batch size
@@ -133,34 +133,34 @@ def mlp_2d(b, l, e, f, depth, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'n
     t2 = topology['t2']
 
     ######################################################################################################################################################
-    fc1 = LinearSumma('fc1', b, l, e, f, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    fc1 = LinearSumma('fc1', b, l, e, f, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(fc1.get_stats())
     ######################################################################################################################################################
-    fc1_bias = Bias('fc1-bias', b, l, f, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    fc1_bias = Bias('fc1-bias', b, l, f, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(fc1_bias.get_stats())
     ######################################################################################################################################################
-    act1 = Act('act1', b * (l // m2) * (f // m1))
+    act1 = Act('act1', b * (l // m2) * (f // m1), system=system)
     summary.append(act1.get_stats())
     ######################################################################################################################################################
-    dpr1 = DropOut('dpr1', b * (l // m2) * (f // m1))
+    dpr1 = DropOut('dpr1', b * (l // m2) * (f // m1), system=system)
     summary.append(dpr1.get_stats())
     ######################################################################################################################################################
-    fc2 = LinearSumma('fc2', b, l, f, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    fc2 = LinearSumma('fc2', b, l, f, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(fc2.get_stats())
     ######################################################################################################################################################
-    fc2_bias = Bias('fc2-bias', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    fc2_bias = Bias('fc2-bias', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(fc2_bias.get_stats())
     ######################################################################################################################################################
-    dpr2 = DropOut('dpr2', b * (l // m2) * (e // m1))
+    dpr2 = DropOut('dpr2', b * (l // m2) * (e // m1), system=system)
     summary.append(dpr2.get_stats())
     ######################################################################################################################################################
-    ln1 = LayerNorm2D('ln1', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    ln1 = LayerNorm2D('ln1', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(ln1.get_stats())
     ######################################################################################################################################################
 
     return pd.DataFrame(summary)
 
-def sa_1d(b, l, e, h, depth, parallelism={'m': 1}, topology={'t': 'nvlink'}, flash_attention=False, attention_recompute=False):
+def sa_1d(b, l, e, h, parallelism={'m': 1}, topology={'t': 'nvlink'}, flash_attention=False, attention_recompute=False, system=None):
     """
     parameters: b: batch size
                 l: seq length
@@ -224,45 +224,46 @@ def sa_1d(b, l, e, h, depth, parallelism={'m': 1}, topology={'t': 'nvlink'}, fla
     t = topology['t']
 
     ######################################################################################################################################################
-    qkv = Linear('qkv', b, l, e, (3 * e), parallelism={'dim1': 1, 'dim2': m}, topology={'t1': 'none', 't2': t})
+    qkv = Linear('qkv', b, l, e, (3 * e), parallelism={'dim1': 1, 'dim2': m}, topology={'t1': 'none', 't2': t}, system=system)
     summary.append(qkv.get_stats())
     if flash_attention:
         ######################################################################################################################################################
-        fusedla = FusedLA('fusedla', b, l, (e // h), h, parallelism={'dim1': m}, topology={'t1': t})
+        fusedla = FusedLA('fusedla', b, l, (e // h), h, parallelism={'dim1': m}, topology={'t1': t}, system=system)
         summary.append(fusedla.get_stats())
         ######################################################################################################################################################
     else:
         ######################################################################################################################################################
         # need to recompute logits if checkpointed, Q/K still stored
-        logits = Logits('logits', b, l, (e // h), h, parallelism={'dim1': m}, topology={'t1': t}, recompute=attention_recompute)
+        logits = Logits('logits', b, l, (e // h), h, parallelism={'dim1': m}, topology={'t1': t}, recompute=attention_recompute, system=system)
         summary.append(logits.get_stats())
         ######################################################################################################################################################
         # need to recompute softmax if checkpointed, don't store input attention 
-        softmax = Softmax('softmax', b, h, l, l, parallelism={'dim1': m}, topology={'t1': t}, recompute=attention_recompute, remat=attention_recompute)
+        softmax = Softmax('softmax', b, h, l, l, parallelism={'dim1': m}, topology={'t1': t}, recompute=attention_recompute,
+                          remat=attention_recompute, system=system)
         summary.append(softmax.get_stats())
         ######################################################################################################################################################
-        dpr_at = DropOut('dpr_at', b * (h // m) * l * l, recompute=attention_recompute, remat=attention_recompute)
+        dpr_at = DropOut('dpr_at', b * (h // m) * l * l, recompute=attention_recompute, remat=attention_recompute,  system=system)
         summary.append(dpr_at.get_stats())
         ######################################################################################################################################################
-        attend = Attend('attend', b, l, (e // h), h, parallelism={'dim1': m}, topology={'t1': t}, remat=attention_recompute)
+        attend = Attend('attend', b, l, (e // h), h, parallelism={'dim1': m}, topology={'t1': t}, remat=attention_recompute,  system=system)
         summary.append(attend.get_stats())
         ######################################################################################################################################################
-    vproj = Linear('vproj', b, l, e, e, parallelism={'dim1': m, 'dim2': 1}, topology={'t1': t, 't2': 'none'})
+    vproj = Linear('vproj', b, l, e, e, parallelism={'dim1': m, 'dim2': 1}, topology={'t1': t, 't2': 'none'},  system=system)
     summary.append(vproj.get_stats())
     ######################################################################################################################################################
-    vproj_bias = Bias('vproj-bias', b, l, e, parallelism={'dim1': 1, 'dim2': 1}, topology={'t1': 'none', 't2': 'none'})
+    vproj_bias = Bias('vproj-bias', b, l, e, parallelism={'dim1': 1, 'dim2': 1}, topology={'t1': 'none', 't2': 'none'},  system=system)
     summary.append(vproj_bias.get_stats())
     ######################################################################################################################################################
-    dpr_v = DropOut('dpr_v', b * (l // m) * e)
+    dpr_v = DropOut('dpr_v', b * (l // m) * e,  system=system)
     summary.append(dpr_v.get_stats())
     ######################################################################################################################################################
-    ln2 = LayerNorm('ln2', b, l, e, parallelism={'dim1': m}, topology={'t1': t})
+    ln2 = LayerNorm('ln2', b, l, e, parallelism={'dim1': m}, topology={'t1': t},  system=system)
     summary.append(ln2.get_stats())
     ######################################################################################################################################################
 
     return pd.DataFrame(summary)
 
-def sa_2d(b, l, e, h, depth, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 't2': 'none'}):
+def sa_2d(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 't2': 'none'}, system=None):
     """
     parameters: b: batch size
                 l: seq length
@@ -323,37 +324,37 @@ def sa_2d(b, l, e, h, depth, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'no
     t2 = topology['t2']
 
     ######################################################################################################################################################
-    qkv = LinearSumma('qkv', b, l, e, (3 * e), parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    qkv = LinearSumma('qkv', b, l, e, (3 * e), parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1},  system=system)
     summary.append(qkv.get_stats())
     ######################################################################################################################################################
-    logits = LogitsSumma('logits', b, l, (e // h), h, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    logits = LogitsSumma('logits', b, l, (e // h), h, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1},  system=system)
     summary.append(logits.get_stats())
     ######################################################################################################################################################
-    softmax = Softmax2D('softmax', b, h, l, l, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    softmax = Softmax2D('softmax', b, h, l, l, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1},  system=system)
     summary.append(softmax.get_stats())
     ######################################################################################################################################################
-    dpr_at = DropOut('dpr_at', b * h * (l // m2) * (l // m1))
+    dpr_at = DropOut('dpr_at', b * h * (l // m2) * (l // m1),  system=system)
     summary.append(dpr_at.get_stats())
     ######################################################################################################################################################
-    attend = AttendSumma('attend', b, l, (e // h), h, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    attend = AttendSumma('attend', b, l, (e // h), h, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1},  system=system)
     summary.append(attend.get_stats())
     ######################################################################################################################################################
-    vproj = LinearSumma('vproj', b, l, e, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    vproj = LinearSumma('vproj', b, l, e, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(vproj.get_stats())
     ######################################################################################################################################################
-    vproj_bias = Bias('vproj-bias', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    vproj_bias = Bias('vproj-bias', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(vproj_bias.get_stats())
     ######################################################################################################################################################
-    dpr_v = DropOut('dpr_v', b * (l // m2) * (e // m1))
+    dpr_v = DropOut('dpr_v', b * (l // m2) * (e // m1), system=system)
     summary.append(dpr_v.get_stats())
     ######################################################################################################################################################
-    ln2 = LayerNorm2D('ln2', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    ln2 = LayerNorm2D('ln2', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(ln2.get_stats())
     ######################################################################################################################################################
 
     return pd.DataFrame(summary)
 
-def sa_2d_seqp(b, l, e, h, depth, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 't2': 'none'}):
+def sa_2d_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 't2': 'none'}, flash_attention=True, system=None):
     """
     parameters: b: batch size
                 l: seq length
@@ -414,31 +415,38 @@ def sa_2d_seqp(b, l, e, h, depth, parallelism={'m1': 1, 'm2': 1}, topology={'t1'
     t2 = topology['t2']
 
     ######################################################################################################################################################
-    qkv = LinearSumma('qkv', b, l, e, (3 * e), parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    qkv = LinearSumma('qkv', b, l, e, (3 * e), parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(qkv.get_stats())
-    ######################################################################################################################################################
-    logits = LogitsSeqp('logits', b, l, (e // h), h, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
-    summary.append(logits.get_stats())
-    ######################################################################################################################################################
-    softmax = Softmax('softmax', b, h, (l // m2), l, parallelism={'dim1': m1}, topology={'t1': t1})
-    summary.append(softmax.get_stats())
-    ######################################################################################################################################################
-    dpr_at = DropOut('dpr_at', b * (h // m1) * (l // m2) * l)
-    summary.append(dpr_at.get_stats())
-    ######################################################################################################################################################
-    attend = AttendSeqp('attend', b, l, (e // h), h, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
-    summary.append(attend.get_stats())
-    ######################################################################################################################################################
-    vproj = LinearSumma('vproj', b, l, e, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+
+    if flash_attention:
+        ######################################################################################################################################################
+        fusedla = FusedLASeqp('fusedla', b, l, (e // h), h, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
+        summary.append(fusedla.get_stats())
+        ######################################################################################################################################################
+    else:
+        ######################################################################################################################################################
+        logits = LogitsSeqp('logits', b, l, (e // h), h, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
+        summary.append(logits.get_stats())
+        ######################################################################################################################################################
+        softmax = Softmax('softmax', b, h, (l // m2), l, parallelism={'dim1': m1}, topology={'t1': t1}, system=system)
+        summary.append(softmax.get_stats())
+        ######################################################################################################################################################
+        dpr_at = DropOut('dpr_at', b * (h // m1) * (l // m2) * l, system=system)
+        summary.append(dpr_at.get_stats())
+        ######################################################################################################################################################
+        attend = AttendSeqp('attend', b, l, (e // h), h, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
+        summary.append(attend.get_stats())
+        ######################################################################################################################################################
+    vproj = LinearSumma('vproj', b, l, e, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(vproj.get_stats())
     ######################################################################################################################################################
-    vproj_bias = Bias('vproj-bias', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    vproj_bias = Bias('vproj-bias', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(vproj_bias.get_stats())
     ######################################################################################################################################################
-    dpr_v = DropOut('dpr_v', b * (l // m2) * (e // m1))
+    dpr_v = DropOut('dpr_v', b * (l // m2) * (e // m1), system=system)
     summary.append(dpr_v.get_stats())
     ######################################################################################################################################################
-    ln2 = LayerNorm2D('ln2', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1})
+    ln2 = LayerNorm2D('ln2', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(ln2.get_stats())
     ######################################################################################################################################################
 
