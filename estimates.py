@@ -117,8 +117,8 @@ class Estimates():
         lf = system['nvlink_latency']
         es = system['ib_eff']
         ef = system['nvlink_eff']
-        bs = system['ib_bandwidth']
-        bf = system['nvlink_bandwidth'] * (topology - 1)
+        bs = system['ib_bandwidth'] * es
+        bf = system['nvlink_bandwidth'] * (topology - 1) * ef
         assert topology <= nvs, 'you have provisioned more gpus than nvlink domain size for fast comm'
 
         # define some pre-factors assuming bus bw from nccl perf docs
@@ -134,6 +134,15 @@ class Estimates():
 
         if comm_type == 'allreduce':
             t_comm *= 2
+
+        if comm_type in ['reduce', 'broadcast']:
+            if topology == 1:
+                t_comm = vol / bs
+            elif nodes == 1:
+                t_comm = vol / bf # has nvlink and only one node
+            else:
+                t_comm = max(vol / (topology * bs), vol / bf)
+
 
         return t_comm
 
