@@ -4,7 +4,8 @@ class Linear(Estimates):
     def __init__(self, name, b, l, e, f, 
                  has_bias=False,
                  parallelism={'dim1': 1, 'dim2': 1}, 
-                 topology={'dim1': 'none', 'dim2': 'none'}):
+                 topology={'dim1': 'none', 'dim2': 'none'},
+                 system=None):
         """
         nn.Linear layer estimates
         parameters: b: batch size
@@ -32,7 +33,7 @@ class Linear(Estimates):
                 nothing in bwd
         """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -116,7 +117,8 @@ class Linear(Estimates):
 class LinearSumma(Estimates):
     def __init__(self, name, b, l, e, f, 
                  parallelism={'dim1': 1, 'dim2': 1}, 
-                 topology={'dim1': 'none', 'dim2': 'none'}):
+                 topology={'dim1': 'none', 'dim2': 'none'}, 
+                 system=None):
         """
         nn.Linear layer estimates
         parameters: b: batch size
@@ -152,7 +154,7 @@ class LinearSumma(Estimates):
             nb = m if square grid of procs; else it's some small number (?)
         """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -241,20 +243,18 @@ class LinearSumma(Estimates):
             comm_size = comm_sizes[c]
             comm_type = comm_types[c]
             comm_top = comm_tops[c]
-            # we are tracking total comm vols across n_b itrs
-            t_for_nb_comms = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
-            if verbose:
-                print(self.name)
-                print("{},{},{},{},{}".format(self.n_b, comm, comm_type, comm_top, t_for_nb_comms))
-            t_for_one_comm_set += t_for_nb_comms / self.n_b 
+
+#            t_for_nb_comms = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+#            t_for_one_comm_set += t_for_nb_comms / self.n_b 
+
+            # for any comm, divide by n_b for each itr (do it this way because of the comm latencies)
+            t_for_one_comm_set += self.get_time_comm(comm / self.n_b, comm_size, comm_type, comm_top)  
 
         if verbose:
             print(t_compute, t_comp, t_mem, flops, mem)
 
         # overlap some comms with compute
         t_comm = t_for_one_comm_set + max(t_for_one_comm_set * self.n_b - t_compute, 0)
-        if verbose:
-            print("one comm = {}, {}".format(t_for_one_comm_set, t_comm))
         t = t_compute + t_comm
         return t, t_comm, intensity
 
@@ -282,7 +282,8 @@ class LinearSumma(Estimates):
 class Bias(Estimates):
     def __init__(self, name, b, l, f, 
                  parallelism={'dim1': 1, 'dim2': 1}, 
-                 topology={'dim1': 'none', 'dim2': 'none'}):
+                 topology={'dim1': 'none', 'dim2': 'none'},
+                 system=None):
         """
         bias layer estimates
         parameters: b: batch size
@@ -302,7 +303,7 @@ class Bias(Estimates):
         comments: 
         """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -354,7 +355,7 @@ class Bias(Estimates):
         return self.stats
 
 class Act(Estimates):
-    def __init__(self, name, m):
+    def __init__(self, name, m, system=None):
         """
         activation function estimates
         parameters: m: size of act
@@ -367,7 +368,7 @@ class Act(Estimates):
                 dL/dX = dL/dY * f(X)
             """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -402,7 +403,7 @@ class Act(Estimates):
         return self.stats
 
 class DropOut(Estimates):
-    def __init__(self, name, m):
+    def __init__(self, name, m, recompute=False, remat=False, system=None):
         """
         dropout function estimates
         parameters: m: size of act
@@ -416,7 +417,7 @@ class DropOut(Estimates):
                 dl/dX = dl/dY * random_mask
         """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -446,7 +447,9 @@ class DropOut(Estimates):
                        weights_mem = 0,
                        weights_grad_mem = 0,
                        flops_bwd = flops_bwd,
-                       mem_bwd = mem_bwd)
+                       mem_bwd = mem_bwd,
+                       recompute = recompute,
+                       remat = remat)
 
     def get_stats(self):
         self.compute_time()
@@ -455,7 +458,7 @@ class DropOut(Estimates):
 class Softmax(Estimates):
     def __init__(self, name, b, h, l1, l2,
                  parallelism={'dim1': 1,}, 
-                 topology={'dim1': 'none'}):
+                 topology={'dim1': 'none'}, recompute=False, remat=False, system=None):
         """
         softmax  function estimates
         parameters: b: batch size
@@ -474,7 +477,7 @@ class Softmax(Estimates):
         comments: . is pointwise mult
         """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -509,7 +512,9 @@ class Softmax(Estimates):
                        weights_mem = 0,
                        weights_grad_mem = 0,
                        flops_bwd = flops_bwd,
-                       mem_bwd = mem_bwd)
+                       mem_bwd = mem_bwd,
+                       recompute = recompute,
+                       remat = remat)
 
     def get_stats(self):
         self.compute_time()
@@ -518,7 +523,7 @@ class Softmax(Estimates):
 class Softmax2D(Estimates):
     def __init__(self, name, b, h, l1, l2,
                  parallelism={'dim1': 1, 'dim2': 1}, 
-                 topology={'dim1': 'none', 'dim2': 'none'}):
+                 topology={'dim1': 'none', 'dim2': 'none'}, recompute=False, remat=False, system=None):
         """
         softmax  function estimates
         parameters: b: batch size
@@ -537,7 +542,7 @@ class Softmax2D(Estimates):
         comments: . is pointwise mult
         """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -596,7 +601,9 @@ class Softmax2D(Estimates):
                        comm_bwd = comm_bwd, 
                        comm_bwd_type = comm_bwd_type,
                        comm_bwd_size = comm_bwd_size,
-                       comm_bwd_topology = comm_bwd_topology)
+                       comm_bwd_topology = comm_bwd_topology,
+                       recompute = recompute,
+                       remat = remat)
 
     def get_stats(self):
         self.compute_time()
@@ -605,7 +612,7 @@ class Softmax2D(Estimates):
 class LayerNorm(Estimates):
     def __init__(self, name, b, l, e,
                  parallelism={'dim1': 1}, 
-                 topology={'dim1': 'none'}):
+                 topology={'dim1': 'none'}, system=None):
         """
         layernorm layer estimates
         parameters: b: batch size
@@ -637,7 +644,7 @@ class LayerNorm(Estimates):
         comments: this ref is right: https://triton-lang.org/main/getting-started/tutorials/05-layer-norm.html
         """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -710,7 +717,7 @@ class LayerNorm(Estimates):
 class LayerNorm2D(Estimates):
     def __init__(self, name, b, l, e,
                  parallelism={'dim1': 1, 'dim2': 1}, 
-                 topology={'dim1': 'none', 'dim2': 'none'}):
+                 topology={'dim1': 'none', 'dim2': 'none'}, system=None):
         """
         layernorm layer estimates
         parameters: b: batch size
@@ -742,7 +749,7 @@ class LayerNorm2D(Estimates):
         comments: this ref is right: https://triton-lang.org/main/getting-started/tutorials/05-layer-norm.html
         """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -819,7 +826,7 @@ class LayerNorm2D(Estimates):
 class Logits(Estimates):
     def __init__(self, name, b, l, q, h, 
                  parallelism={'dim1': 1}, 
-                 topology={'dim1': 'none'}):
+                 topology={'dim1': 'none'}, recompute=False, system=None):
         """
         logits layer estimates
         parameters: b: batch size
@@ -842,7 +849,7 @@ class Logits(Estimates):
                 (b,h,l,q) = (b,h,l,l) * (b,h,l,q)
         """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -878,7 +885,8 @@ class Logits(Estimates):
                        weights_mem = 0,
                        weights_grad_mem = 0,
                        flops_bwd = flops_bwd,
-                       mem_bwd = mem_bwd)
+                       mem_bwd = mem_bwd,
+                       recompute = recompute)
 
     def get_stats(self):
         self.compute_time()
@@ -887,7 +895,7 @@ class Logits(Estimates):
 class Attend(Estimates):
     def __init__(self, name, b, l, q, h, 
                  parallelism={'dim1': 1}, 
-                 topology={'dim1': 'none'}):
+                 topology={'dim1': 'none'}, remat=False, system=None):
         """
         attend layer estimates
         parameters: b: batch size
@@ -907,7 +915,7 @@ class Attend(Estimates):
                 (b,h,l,q) = (b,h,l,l) * (b,h,l,q) 
         """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -925,8 +933,8 @@ class Attend(Estimates):
         activation_in_mem =  (b * h_local * l * l) * element_size
         activation_in_mem += (b * h_local * l * q) * element_size
         activation_out_mem = (b * h_local * l * q) * element_size
-        activation_buffer =  (b * h_local * l * l) * element_size # store for bwd pass
-        activation_buffer += (b * h_local * l * q) * element_size # store for bwd pass
+        activation_buffer1 =  (b * h_local * l * l) * element_size # store for bwd pass
+        activation_buffer2 = (b * h_local * l * q) * element_size # store for bwd pass
         mem_fwd = activation_in_mem + activation_out_mem
 
         ####### backward pass #######
@@ -934,7 +942,10 @@ class Attend(Estimates):
         flops_bwd += b * h_local * l * q * (l * flops_per_mult + (l - 1) * flops_per_add)
         activation_grad_mem = 3 * (b * h_local * l * q) * element_size
         activation_grad_mem_att = (b * h_local * l * l) * element_size
-        mem_bwd = activation_grad_mem + activation_grad_mem_att + activation_buffer
+        mem_bwd = activation_grad_mem + activation_grad_mem_att + activation_buffer1 + activation_buffer2
+        
+        activation_buffer1 *= (not remat) # this buffer is released if remat
+        activation_buffer = activation_buffer1 + activation_buffer2
 
         self.set_stats(name,
                        flops_fwd = flops_fwd,
@@ -953,7 +964,7 @@ class Attend(Estimates):
 class LogitsSumma(Estimates):
     def __init__(self, name, b, l, q, h, 
                  parallelism={'dim1': 1, 'dim2': 1}, 
-                 topology={'dim1': 'none', 'dim2': 'none'}):
+                 topology={'dim1': 'none', 'dim2': 'none'}, recompute=False, system=None):
         """
         logit layer estimates
         parameters: b: batch size
@@ -975,7 +986,7 @@ class LogitsSumma(Estimates):
         comments:
         """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -1047,7 +1058,8 @@ class LogitsSumma(Estimates):
                        comm_bwd = comm_bwd, 
                        comm_bwd_type = comm_bwd_type,
                        comm_bwd_size = comm_bwd_size,
-                       comm_bwd_topology = comm_bwd_topology)
+                       comm_bwd_topology = comm_bwd_topology,
+                       recompute = recompute)
 
 
     def compute_time_summa(self, flops, mem, comms, comm_sizes, comm_types, comm_tops):
@@ -1095,7 +1107,7 @@ class LogitsSumma(Estimates):
 class AttendSumma(Estimates):
     def __init__(self, name, b, l, q, h, 
                  parallelism={'dim1': 1, 'dim2': 1}, 
-                 topology={'dim1': 'none', 'dim2': 'none'}):
+                 topology={'dim1': 'none', 'dim2': 'none'}, remat=False, system=None):
         """
         attend layer estimates
         parameters: b: batch size
@@ -1117,7 +1129,7 @@ class AttendSumma(Estimates):
         comments:
         """
 
-        super().__init__()
+        super().__init__(system=system)
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -1138,7 +1150,7 @@ class AttendSumma(Estimates):
         flops_fwd = b * h * l_local_2 * q_local * (l * flops_per_mult + l * flops_per_add) # l outer products and l addns in total
         
         # total mem
-        activation_buffer = (b * h * l_local_2 * l_local_1 + b * h * l_local_2 * q_local) * element_size # store for bwd pass
+        activation_buffer = (b * h * l_local_2 * l_local_1 * (not remat) + b * h * l_local_2 * q_local) * element_size # store for bwd pass
         weights_mem = 0 
         # careful, nb is arbitrarily chosen here
         nb = l // 512 if m1 != m2 else m1
@@ -1234,10 +1246,267 @@ class AttendSumma(Estimates):
         self.compute_time()
         return self.stats
 
+class LogitsSeqp(Estimates):
+    def __init__(self, name, b, l, q, h, 
+                 parallelism={'dim1': 1, 'dim2': 1}, 
+                 topology={'dim1': 'none', 'dim2': 'none'}, recompute=False, system=None):
+        """
+        logit layer estimates
+        parameters: b: batch size
+                    l: seq length
+                    h: number of attention heads
+                    q: embedding dim/h
+                    element_size: in MB
+
+        forward pass:
+             A = Q * K^T
+             (b,h/m1,l/m2,l) = (b,h/m1,l/m2,q) * (b,h/m1,q,l/m2)
+        backward pass:
+             dL/dK = dL/dA^T * Q
+             (b,h/m1,l/m2,q) = (b,h/m1,l,l/m2) * (b,h/m1,l/m2,q)
+             dL/dQ = dL/dA * K
+             (b,h/m1,l/m2,q) = (b,h/m1,l/m2,l) * (b,h/m1,l/m2,q)
+        comments:
+        """
+
+        super().__init__(system=system)
+        
+        flops_per_mult = 1 * self.flops_units
+        flops_per_add = 1 * self.flops_units
+        element_size = self.element_size
+
+        m2 = parallelism['dim1']
+        m1 = parallelism['dim2']
+        t2 = topology['t1']
+        t1 = topology['t2']
+        m1_parallel = (m1 > 1)
+        m2_parallel = (m2 > 1)
+
+        l_local = l // m2
+        h_local = h // m1
+
+        # total flops
+        flops_fwd = b * h_local * l_local * l * (q * flops_per_mult + (q - 1) * flops_per_add)
+
+        #total mem
+        activation_in_mem = (b * h_local * l_local * q) * element_size
+        activation_in_mem += (b * h_local * l * q) * element_size
+        activation_out_mem = (b * h_local * l_local * l) * element_size
+        activation_buffer = 2 * (b * h_local * l_local * q) * element_size # Q and K
+        mem_fwd = activation_in_mem + activation_out_mem
+
+        # sync/comm layers
+        comm_fwd = m2_parallel * (b * h_local * l * q) * element_size
+        comm_fwd_type = "allgather"
+        comm_fwd_size = m2
+        comm_fwd_topology = t2
+
+        ####### backward pass #######
+        flops_bwd = b * h_local * l_local * q * (l * flops_per_mult + (l - 1) * flops_per_add)
+        flops_bwd += b * h_local * l * q * (l_local * flops_per_mult + (l_local - 1) * flops_per_add)
+        activation_grad_mem = (b * h_local * l_local * q + b * h_local * l * q) * element_size
+        activation_grad_mem_att = 2 * (b * h_local * l_local * l) * element_size
+        mem_bwd = activation_grad_mem + activation_grad_mem_att + activation_buffer
+
+        comm_bwd = [m2_parallel * (b * h_local * l * q) * element_size,
+                    m2_parallel * (b * h_local * l * q) * element_size]
+        comm_bwd_type = ["allgather", "reducescatter"]
+        comm_bwd_size = [m2, m2]
+        comm_bwd_topology = [t2, t2] 
+
+        self.set_stats(name,
+                       flops_fwd = flops_fwd,
+                       use_tensor_cores = True,
+                       mem_fwd = mem_fwd,
+                       activation_buffer = activation_buffer,
+                       weights_mem = 0,
+                       weights_grad_mem = 0,
+                       comm_fwd = comm_fwd, 
+                       comm_fwd_type = comm_fwd_type,
+                       comm_fwd_size = comm_fwd_size,
+                       comm_fwd_topology = comm_fwd_topology,
+                       flops_bwd = flops_bwd,
+                       mem_bwd = mem_bwd,
+                       comm_bwd = comm_bwd, 
+                       comm_bwd_type = comm_bwd_type,
+                       comm_bwd_size = comm_bwd_size,
+                       comm_bwd_topology = comm_bwd_topology,
+                       recompute = recompute)
+
+
+    def compute_times(self, flops, mem, comms, comm_sizes, comm_types, comm_tops):
+        t_comp = self.get_time_flops(flops)
+        t_mem  = self.get_time_mem(mem)
+        t_compute = max(t_comp, t_mem)
+        intensity = t_comp / t_mem
+
+        t_comm = 0
+        if isinstance(comms, list):
+            for c, comm in enumerate(comms):
+                comm_size = comm_sizes[c]
+                comm_type = comm_types[c]
+                comm_top = comm_tops[c]
+                t_comm += self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+        else:
+            t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
+
+        t = t_compute + t_comm
+        return t, t_comm, intensity
+
+    def compute_time(self): # overwrite due to diff comm patterns
+        # forward time
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd,
+                                                                                                             self.mem_fwd,
+                                                                                                             self.comm_fwd,
+                                                                                                             self.comm_fwd_size,
+                                                                                                             self.comm_fwd_type,
+                                                                                                             self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd,
+                                                                                                             self.mem_bwd,
+                                                                                                             self.comm_bwd,
+                                                                                                             self.comm_bwd_size,
+                                                                                                             self.comm_bwd_type,
+                                                                                                             self.comm_bwd_topology)
+        self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
+
+
+    def get_stats(self):
+        self.compute_time()
+        return self.stats
+
+class AttendSeqp(Estimates):
+    def __init__(self, name, b, l, q, h, 
+                 parallelism={'dim1': 1, 'dim2': 1}, 
+                 topology={'dim1': 'none', 'dim2': 'none'}, remat=False, system=None):
+        """
+        attend layer estimates
+        parameters: b: batch size
+                    l: seq length
+                    h: number of attention heads
+                    q: embedding dim/h
+                    element_size: in MB
+
+                    
+        layer arithmetic: 
+            assume h = h/m1
+            forward pass :  
+                Y = AV
+                (b,h,l/m2,q) = (b,h,l/m2,l) * (b,h,l/m2,q)
+            backward pass: (L = loss)
+                dL/dA = dL/dY * V^T
+                (b,h,l/m2,l) = (b,h,l/m2,q) * (b,h,q,l/m2)
+                dL/dV = A^T * dL/dY
+                (b,h,l/m2,q) = (b,h,l,l/m2) * (b,h,l/m2,q) 
+        comments:
+        """
+
+        super().__init__(system=system)
+        
+        flops_per_mult = 1 * self.flops_units
+        flops_per_add = 1 * self.flops_units
+        element_size = self.element_size
+
+        m2 = parallelism['dim1']
+        m1 = parallelism['dim2']
+        t2 = topology['t1']
+        t1 = topology['t2']
+        m1_parallel = (m1 > 1)
+        m2_parallel = (m2 > 1)
+
+        l_local = l // m2
+        h_local = h // m1
+        flops_fwd = b * h_local * l_local * q * (l * flops_per_mult + (l - 1) * flops_per_add)
+            
+        # total mem
+        activation_in_mem = (b * h_local * l_local * l) * element_size
+        activation_in_mem += (b * h_local * l * q) * element_size
+        activation_out_mem = (b * h_local * l_local * q) * element_size
+        activation_buffer = (b * h_local * l_local * l) * element_size * (not remat)# store for bwd pass
+        activation_buffer += (b * h_local * l_local * q) * element_size # store for bwd pass
+        mem_fwd = activation_in_mem + activation_out_mem
+
+        # sync/comm layers
+        comm_fwd = m2_parallel * (b * h_local * l * q) * element_size
+        comm_fwd_type = "allgather"
+        comm_fwd_size = m2
+        comm_fwd_topology = t2
+
+        flops_bwd = b * h_local * l_local * l * (q * flops_per_mult + (q - 1) * flops_per_add)
+        flops_bwd += b * h_local * l * q * (l_local * flops_per_mult + (l_local - 1) * flops_per_add)
+        activation_grad_mem = 2 * (b * h_local * l_local * q) * element_size + (b * h_local * l_local * q) * element_size
+        activation_grad_mem_att = (b * h_local * l_local * l) * element_size
+        buffers_with_gather = b * h_local * (l_local * l + l * q) * element_size # attention and values (this is allgathered)
+        mem_bwd = activation_grad_mem + activation_grad_mem_att  + buffers_with_gather
+
+        comm_bwd = [m2_parallel * (b * h_local * l * q) * element_size,
+                    m2_parallel * (b * h_local * l * q) * element_size]
+        comm_bwd_type = ["allgather", "reducescatter"] # reducescatter for dl(dKV)
+        comm_bwd_size = [m2, m2]
+        comm_bwd_topology = [t2, t2] 
+
+        self.set_stats(name,
+                       flops_fwd = flops_fwd,
+                       use_tensor_cores = True,
+                       mem_fwd = mem_fwd,
+                       activation_buffer = activation_buffer,
+                       weights_mem = 0,
+                       weights_grad_mem = 0,
+                       comm_fwd = comm_fwd, 
+                       comm_fwd_type = comm_fwd_type,
+                       comm_fwd_size = comm_fwd_size,
+                       comm_fwd_topology = comm_fwd_topology,
+                       flops_bwd = flops_bwd,
+                       mem_bwd = mem_bwd,
+                       comm_bwd = comm_bwd, 
+                       comm_bwd_type = comm_bwd_type,
+                       comm_bwd_size = comm_bwd_size,
+                       comm_bwd_topology = comm_bwd_topology)
+
+
+    def compute_times(self, flops, mem, comms, comm_sizes, comm_types, comm_tops):
+        t_comp = self.get_time_flops(flops)
+        t_mem  = self.get_time_mem(mem)
+        t_compute = max(t_comp, t_mem)
+        intensity = t_comp / t_mem
+
+        t_comm = 0
+        if isinstance(comms, list):
+            for c, comm in enumerate(comms):
+                comm_size = comm_sizes[c]
+                comm_type = comm_types[c]
+                comm_top = comm_tops[c]
+                t_comm += self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+        else:
+            t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
+
+        t = t_compute + t_comm
+        return t, t_comm, intensity
+
+    def compute_time(self): # overwrite due to diff comm patterns
+        # forward time
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd,
+                                                                                                             self.mem_fwd,
+                                                                                                             self.comm_fwd,
+                                                                                                             self.comm_fwd_size,
+                                                                                                             self.comm_fwd_type,
+                                                                                                             self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd,
+                                                                                                             self.mem_bwd,
+                                                                                                             self.comm_bwd,
+                                                                                                             self.comm_bwd_size,
+                                                                                                             self.comm_bwd_type,
+                                                                                                             self.comm_bwd_topology)
+        self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
+
+
+    def get_stats(self):
+        self.compute_time()
+        return self.stats
+
 class FusedLA(Estimates):
     def __init__(self, name, b, l, q, h, 
                  parallelism={'dim1': 1}, 
-                 topology={'dim1': 'none'}):
+                 topology={'dim1': 'none'}, system=None):
         """
         Fused LA layer estimates
         parameters: b: batch size
@@ -1257,7 +1526,7 @@ class FusedLA(Estimates):
                 Y = AV
                 (b,h,l,q) = (b,h,l,l) * (b,h,l,q)
             backward pass:
-                dL/dK = dL/dA * Q
+                dL/dK = dL/dA^T * Q
                 (b,h,l,q) = (b,h,l,l) * (b,h,l,q)
                 dL/dQ = dL/dA * K
                 (b,h,l,q) = (b,h,l,l) * (b,h,l,q)
@@ -1273,7 +1542,10 @@ class FusedLA(Estimates):
                 (b,h,l,q) = (b,h,l,l) * (b,h,l,q) 
         """
 
-        super().__init__()
+        super().__init__(system=system)
+
+        # ugly fix: some ops here wont use tensor cores so correct them
+        tensor_core_factor = self.system['matrix_flops_fp16'] / self.system['vector_flops_fp16']
         
         flops_per_mult = 1 * self.flops_units
         flops_per_add = 1 * self.flops_units
@@ -1289,9 +1561,13 @@ class FusedLA(Estimates):
         # logits
         flops_fwd  = b * h_local * l * l * (q * flops_per_mult + (q - 1) * flops_per_add)
         # softmax
-        flops_fwd += b * h_local * l * l * (flops_per_exp + flops_per_mult) + (b * h_local * l * (l - 1)) * flops_per_add
+        flops_softmax = b * h_local * l * l * (flops_per_exp + flops_per_mult) + (b * h_local * l * (l - 1)) * flops_per_add
+        flops_softmax *= tensor_core_factor # wont use tensor cores
+        flops_fwd += flops_softmax
         # dropout
-        flops_fwd += (b * h_local * l * l) * flops_per_mult
+        flops_dpr = (b * h_local * l * l) * flops_per_mult
+        flops_dpr *= tensor_core_factor # wont use tensor cores
+        flops_fwd += flops_dpr
         # attend
         flops_fwd += b * h_local * l * q * (l * flops_per_mult + (l - 1) * flops_per_add)
 
@@ -1314,9 +1590,13 @@ class FusedLA(Estimates):
         # logits
         flops_bwd = 2 * b * h_local * l * q * (l * flops_per_mult + (l - 1) * flops_per_add)
         # softmax
-        flops_bwd += (2 * b * h_local * l * l) * flops_per_mult +  (b * h_local * l * (l - 1)) * flops_per_add + (b * h_local * l * l) * flops_per_add
+        flops_softmax = (2 * b * h_local * l * l) * flops_per_mult +  (b * h_local * l * (l - 1)) * flops_per_add + (b * h_local * l * l) * flops_per_add
+        flops_softmax *= tensor_core_factor # wont use tensor cores
+        flops_bwd += flops_softmax
         # dropout
-        flops_bwd += b * h_local * l * l  * flops_per_mult
+        flops_dpr = b * h_local * l * l  * flops_per_mult
+        flops_dpr *= tensor_core_factor # wont use tensor cores
+        flops_bwd += flops_dpr
         # attend
         flops_bwd += b * h_local * l * l * (q * flops_per_mult + (q - 1) * flops_per_add)
         flops_bwd += b * h_local * l * q * (l * flops_per_mult + (l - 1) * flops_per_add)
@@ -1325,9 +1605,13 @@ class FusedLA(Estimates):
         # logit
         flops_bwd +=  b * h_local * l * l * (q * flops_per_mult + (q - 1) * flops_per_add)
         # softmax
-        flops_bwd += b * h_local * l * l * (flops_per_exp + flops_per_mult) + (b * h_local * l * (l - 1)) * flops_per_add
+        flops_softmax = b * h_local * l * l * (flops_per_exp + flops_per_mult) + (b * h_local * l * (l - 1)) * flops_per_add
+        flops_softmax *= tensor_core_factor # wont use tensor cores
+        flops_bwd += flops_softmax
         # dropout
-        flops_bwd += (b * h_local * l * l) * flops_per_mult
+        flops_dpr = (b * h_local * l * l) * flops_per_mult
+        flops_dpr *= tensor_core_factor # wont use tensor cores
+        flops_bwd += flops_dpr
 
         # mem
         activation_grad_mem = 4 * (b * h_local * l * q) * element_size # dq, dk, dv, dresult
@@ -1335,13 +1619,204 @@ class FusedLA(Estimates):
 
         self.set_stats(name,
                        flops_fwd = flops_fwd,
-                       use_tensor_cores = False,
+                       use_tensor_cores = True,
                        mem_fwd = mem_fwd,
                        activation_buffer = activation_buffer,
                        weights_mem = 0,
                        weights_grad_mem = 0,
                        flops_bwd = flops_bwd,
                        mem_bwd = mem_bwd)
+
+    def get_stats(self):
+        self.compute_time()
+        return self.stats
+
+class FusedLASeqp(Estimates):
+    def __init__(self, name, b, l, q, h, 
+                 parallelism={'dim1': 1, 'dim2': 1}, 
+                 topology={'dim1': 'none', 'dim2': 'none'}, system=None):
+        """
+        Fused LA layer estimates
+        parameters: b: batch size
+                    l: seq length
+                    h: number of attention heads
+                    q: embedding dim/h
+                    element_size: in MB
+
+        layer arithmetic:
+            forward pass:
+                A = Q * K^T
+                (b,h/m1,l/m2,l) = (b,h/m1,l/m2,q) * (b,h/m1,q,l/m2)
+                A = softmax(A)
+                (b,h/m1,l/m2,l) = (b,h/m1,l/m2,l)
+                A = random_mask(A)
+                Y = AV
+                (b,h,l/m2,q) = (b,h,l/m2,l) * (b,h,l/m2,q)
+            backward pass:
+                dL/dK = dL/dA^T * Q
+                (b,h/m1,l/m2,q) = (b,h/m1,l,l/m2) * (b,h/m1,l/m2,q)
+                dL/dQ = dL/dA * K
+                (b,h/m1,l/m2,q) = (b,h/m1,l/m2,l) * (b,h/m1,l/m2,q)
+
+                dL/dX = Y . dL/dY - Y . sum(Y . dL/dY, axis=-1)
+                (b,h/m1,l/m2,l) = ... 
+
+                dl/dX = dl/dY * random_mask
+
+                dL/dA = dL/dY * V^T
+                (b,h,l/m2,l) = (b,h,l/m2,q) * (b,h,q,l/m2)
+                dL/dV = A^T * dL/dY
+                (b,h,l/m2,q) = (b,h,l,l/m2) * (b,h,l/m2,q) 
+        """
+
+        super().__init__(system=system)
+
+        # ugly fix: some ops here wont use tensor cores so correct them
+        tensor_core_factor = self.system['matrix_flops_fp16'] / self.system['vector_flops_fp16']
+        
+        flops_per_mult = 1 * self.flops_units
+        flops_per_add = 1 * self.flops_units
+        flops_per_exp = 1 * self.flops_units
+        element_size = self.element_size
+
+        m2 = parallelism['dim1']
+        m1 = parallelism['dim2']
+        t2 = topology['t1']
+        t1 = topology['t2']
+        m1_parallel = (m1 > 1)
+        m2_parallel = (m2 > 1)
+
+        l_local = l // m2
+        h_local = h // m1
+
+        # total flops
+        # logits
+        flops_fwd  = b * h_local * l_local * l * (q * flops_per_mult + (q - 1) * flops_per_add)
+        # softmax
+        flops_softmax = b * h_local * l_local * l * (flops_per_exp + flops_per_mult) + (b * h_local * l_local * (l - 1)) * flops_per_add
+        flops_softmax *= tensor_core_factor # wont use tensor cores
+        flops_fwd += flops_softmax
+        # dropout
+        flops_dpr = (b * h_local * l_local * l) * flops_per_mult
+        flops_dpr *= tensor_core_factor # wont use tensor cores
+        flops_fwd += flops_dpr
+        # attend
+        flops_fwd += b * h_local * l_local * q * (l * flops_per_mult + (l - 1) * flops_per_add)
+
+        #total mem
+        activation_in_mem = (b * h_local * l_local * q) * element_size # Q
+        activation_in_mem += 2 * (b * h_local * l * q) * element_size # K and V, have to allgather KV in fwd pass
+        activation_in_mem += (b * h_local * l_local) * element_size # stats for softmax
+        activation_out_mem = (b * h_local * l_local * q) * element_size # result
+
+        activation_buffer = 3 * (b * h_local * l_local * q) * element_size # q, k, v 
+        activation_buffer += (b * h_local * l_local) * element_size # random number generator states (droppout mask is not stored); dont know if this is float
+        activation_buffer += (b * h_local * l_local) * element_size # stats for softmax
+        
+        # TODO: in software this might be stored (even though the next layer will have it: might need to revisit if not
+        activation_buffer += (b * h_local * l_local * q) * element_size # result for flashattn bwd
+        weights_mem = 0
+        mem_fwd = activation_in_mem + activation_out_mem + weights_mem
+
+        # sync/comm layers
+        comm_fwd = m2_parallel * (2 * b * h_local * l * q) * element_size # allgather KV
+        comm_fwd_type = "allgather"
+        comm_fwd_size = m2
+        comm_fwd_topology = t2
+
+        ####### backward pass #######
+        ####### backward pass #######
+        # logits
+        flops_bwd = b * h_local * l_local * q * (l * flops_per_mult + (l - 1) * flops_per_add)
+        flops_bwd += b * h_local * l * q * (l_local * flops_per_mult + (l_local - 1) * flops_per_add)
+        # softmax
+        flops_softmax = (2 * b * h_local * l_local * l) * flops_per_mult +  (b * h_local * l_local * (l - 1)) * flops_per_add + (b * h_local * l_local * l) * flops_per_add
+        flops_softmax *= tensor_core_factor # wont use tensor cores
+        flops_bwd += flops_softmax
+        # dropout
+        flops_dpr = b * h_local * l_local * l  * flops_per_mult
+        flops_dpr *= tensor_core_factor # wont use tensor cores
+        flops_bwd += flops_dpr
+        # attend
+        flops_bwd += b * h_local * l_local * l * (q * flops_per_mult + (q - 1) * flops_per_add)
+        flops_bwd += b * h_local * l * q * (l_local * flops_per_mult + (l_local - 1) * flops_per_add)
+
+        # extra fwd flops since attn is remat
+        # logits
+        flops_bwd += b * h_local * l_local * l * (q * flops_per_mult + (q - 1) * flops_per_add)
+        # softmax
+        flops_softmax = b * h_local * l_local * l * (flops_per_exp + flops_per_mult) + (b * h_local * l_local * (l - 1)) * flops_per_add
+        flops_softmax *= tensor_core_factor # wont use tensor cores
+        flops_bwd += flops_softmax
+        # dropout
+        flops_dpr = (b * h_local * l_local * l) * flops_per_mult
+        flops_dpr *= tensor_core_factor # wont use tensor cores
+        flops_bwd += flops_dpr
+
+        # mem
+        activation_grad_mem = 2 * (b * h_local * l * q) * element_size # dk, dv (will be reducescattered)
+        activation_grad_mem += 2 * (b * h_local * l_local * q) * element_size # dq, dresult
+        mem_bwd = activation_grad_mem + activation_buffer
+
+        comm_bwd = [m2_parallel * (2 * b * h_local * l * q) * element_size,
+                    m2_parallel * (2 * b * h_local * l * q) * element_size]
+        comm_bwd_type = ["allgather", "reducescatter"] # reducescatter for dl(dKV)
+        comm_bwd_size = [m2, m2]
+        comm_bwd_topology = [t2, t2] 
+
+        self.set_stats(name,
+                       flops_fwd = flops_fwd,
+                       use_tensor_cores = True,
+                       mem_fwd = mem_fwd,
+                       activation_buffer = activation_buffer,
+                       weights_mem = 0,
+                       weights_grad_mem = 0,
+                       comm_fwd = comm_fwd, 
+                       comm_fwd_type = comm_fwd_type,
+                       comm_fwd_size = comm_fwd_size,
+                       comm_fwd_topology = comm_fwd_topology,
+                       flops_bwd = flops_bwd,
+                       mem_bwd = mem_bwd,
+                       comm_bwd = comm_bwd, 
+                       comm_bwd_type = comm_bwd_type,
+                       comm_bwd_size = comm_bwd_size,
+                       comm_bwd_topology = comm_bwd_topology)
+
+    def compute_times(self, flops, mem, comms, comm_sizes, comm_types, comm_tops):
+        t_comp = self.get_time_flops(flops)
+        t_mem  = self.get_time_mem(mem)
+        t_compute = max(t_comp, t_mem)
+        intensity = t_comp / t_mem
+
+        t_comm = 0
+        if isinstance(comms, list):
+            for c, comm in enumerate(comms):
+                comm_size = comm_sizes[c]
+                comm_type = comm_types[c]
+                comm_top = comm_tops[c]
+                t_comm += self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+        else:
+            t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
+
+        t = t_compute + t_comm
+        return t, t_comm, intensity
+
+    def compute_time(self): # overwrite due to diff comm patterns
+        # forward time
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd,
+                                                                                                             self.mem_fwd,
+                                                                                                             self.comm_fwd,
+                                                                                                             self.comm_fwd_size,
+                                                                                                             self.comm_fwd_type,
+                                                                                                             self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd,
+                                                                                                             self.mem_bwd,
+                                                                                                             self.comm_bwd,
+                                                                                                             self.comm_bwd_size,
+                                                                                                             self.comm_bwd_type,
+                                                                                                             self.comm_bwd_topology)
+        self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
+
 
     def get_stats(self):
         self.compute_time()
