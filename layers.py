@@ -114,6 +114,117 @@ class Linear(Estimates):
         self.compute_time()
         return self.stats
 
+class LinearSeqp(Estimates):
+    def __init__(self, name, b, l, e, f, 
+                 has_bias=False,
+                 parallelism={'dim1': 1, 'dim2': 1, 'dimseq': 1}, 
+                 topology={'dim1': 'none', 'dim2': 'none', 'dimseq': 'none'},
+                 system=None):
+        """
+        nn.Linear layer estimates
+        parameters: b: batch size
+                    l: seq length
+                    e: embedding dim/1st dim
+                    f: hidden dim/2nd dim
+                    has_bias: whether bias term is added
+        
+        layer arithmetic: 
+            forward pass :  
+                Y = X * W + B
+                (b,l,f) = (b,l,e) * (e,f) + (1,f)
+            backward pass: (L = loss)
+                dL/dX = dL/dY * W^T
+                (b,l,e) = (b,l,f) * (f,e)
+                dL/dW = X^T * dL/dY
+                (e,f) = (e, bl) * (bl,f) 
+                dL/dB = dL/dY * 1
+                (1,f) = \sum_{b,l} (b,l,f)
+    
+        comments: 
+            weights are 1d parallelized and shared in seqp group
+            seq is embarassingly parallel in fwd, allreduce in bwd for wgrads
+        """
+
+        super().__init__(system=system)
+        
+        flops_per_mult = 1 * self.flops_units
+        flops_per_add = 1 * self.flops_units
+        element_size = self.element_size
+
+        m2 = parallelism['dim1']
+        m1 = parallelism['dim2']
+        mseq = parallelism['dimseq']
+        t2 = topology['t1']
+        t1 = topology['t2']
+        tseq = topology['tseq']
+
+
+        # either e is sharded or f depending on which layer; if both use summa or need to implement an allgather
+        assert (m1 == 1 or m2 == 1), "error: using 1d parallelism function, both dims of weight matrix cannot be sharded"
+        f_local = f // m1
+        e_local = e // m2
+
+        l_local = l // mseq
+
+
+        ####### forward pass ########
+        # total flops
+        flops_fwd = b * l_local * f_local * (e_local * flops_per_mult + (e_local - 1) * flops_per_add)
+            
+        # total mem
+        activation_in_mem = (b * l_local * e_local) * element_size
+        activation_out_mem = (b * l_local * f_local) * element_size
+        activation_buffer = (b * l_local * e_local) * element_size # store for bwd pass
+        weights_mem = (e_local * f_local) * element_size
+        mem_fwd = activation_in_mem + activation_out_mem + weights_mem
+
+        # sync/comm layers: no comms for seq
+        comm_fwd = (b * l * f) * element_size if m2 > 1 else 0
+        comm_fwd_type = 'reducescatter'
+        comm_fwd_size = m2
+        comm_fwd_topology = t2
+
+        ####### backward pass #######
+        xgrad_flops = b * l_local * e_local * (f_local * flops_per_mult + (f_local - 1) * flops_per_add)
+        wgrad_flops = e_local * f_local * (b * l_local * flops_per_mult + (b * l_local - 1) * flops_per_add)
+        flops_bwd = xgrad_flops + wgrad_flops
+
+        wgrad_mem = (e_local * f_local) * element_size
+        weights_grad_mem = wgrad_mem 
+        xgrad_mem = (b * l_local * e_local) * element_size 
+        ygrad_mem = (b * l_local * f_local) * element_size  
+
+        num_bwd_ops = 2 # need to bring ygrad_mem multiple times
+        mem_bwd = weights_grad_mem + xgrad_mem + num_bwd_ops * ygrad_mem + weights_mem + activation_buffer
+
+        # sync/comm layers
+        comm_bwd = (b * l * e) * element_size if m1 > 1 else 0
+        comm_bwd_type = 'reducescatter'
+        comm_bwd_size = m1
+        comm_bwd_topology = t1
+
+        self.set_stats(name,
+                       flops_fwd = flops_fwd,
+                       use_tensor_cores = True,
+                       mem_fwd = mem_fwd,
+                       activation_buffer = activation_buffer,
+                       weights_mem = weights_mem,
+                       weights_grad_mem = weights_grad_mem,
+                       comm_fwd = comm_fwd, 
+                       comm_fwd_type = comm_fwd_type,
+                       comm_fwd_size = comm_fwd_size,
+                       comm_fwd_topology = comm_fwd_topology,
+                       flops_bwd = flops_bwd,
+                       mem_bwd = mem_bwd,
+                       comm_bwd = comm_bwd, 
+                       comm_bwd_type = comm_bwd_type,
+                       comm_bwd_size = comm_bwd_size,
+                       comm_bwd_topology = comm_bwd_topology)
+
+    def get_stats(self):
+        self.compute_time()
+        return self.stats
+
 class LinearSumma(Estimates):
     def __init__(self, name, b, l, e, f, 
                  parallelism={'dim1': 1, 'dim2': 1}, 
@@ -182,7 +293,8 @@ class LinearSumma(Estimates):
         
         # careful, nb is arbitrarily chosen here
         # panel size e/n_b is some value << e/max(m1,m2)
-        n_b = e // 512 if m1 != m2 else m1
+#        n_b = e // 512 if m1 != m2 else m1
+        n_b = self.system['summa_nb']
         self.n_b = n_b
         mem_fwd  = (b * l_local * e + e * f_local + b * l_local * f_local * n_b) * element_size
 
@@ -236,26 +348,24 @@ class LinearSumma(Estimates):
         t_compute = max(t_comp, t_mem)
         intensity = t_comp / t_mem
 
-
         t_for_one_comm_set = 0 # typically two broadcasts or one broadcast, one reduce
 
         for c, comm in enumerate(comms):
             comm_size = comm_sizes[c]
             comm_type = comm_types[c]
             comm_top = comm_tops[c]
-
 #            t_for_nb_comms = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
 #            t_for_one_comm_set += t_for_nb_comms / self.n_b 
 
             # for any comm, divide by n_b for each itr (do it this way because of the comm latencies)
             t_for_one_comm_set += self.get_time_comm(comm / self.n_b, comm_size, comm_type, comm_top)  
 
-        if verbose:
-            print(t_compute, t_comp, t_mem, flops, mem)
 
         # overlap some comms with compute
         t_comm = t_for_one_comm_set + max(t_for_one_comm_set * self.n_b - t_compute, 0)
         t = t_compute + t_comm
+        if verbose:
+            print(t_compute, t_comp, t_mem, flops, mem, t_comm, t_for_one_comm_set, t_for_one_comm_set * self.n_b)
         return t, t_comm, intensity
 
     def compute_time(self): # need to overwrite to implement pipelined/overlapping comms
@@ -1009,7 +1119,8 @@ class LogitsSumma(Estimates):
         # temp matmul bh,l/m2,q/m1 * bh,q/m1,l/nb
         # reduce bh,l/m2,l/nb row-wise
         # careful, nb is arbitrarily chosen here
-        nb = l // 512 if m1 != m2 else m1
+#        nb = l // 512 if m1 != m2 else m1
+        nb = self.system['summa_nb']
         self.n_b = nb
         flops_fwd = b * h * l_local_2 * l * (q_local * flops_per_mult + (q_local - 1) * flops_per_add)
 
@@ -1062,7 +1173,7 @@ class LogitsSumma(Estimates):
                        recompute = recompute)
 
 
-    def compute_time_summa(self, flops, mem, comms, comm_sizes, comm_types, comm_tops):
+    def compute_time_summa(self, flops, mem, comms, comm_sizes, comm_types, comm_tops, verbose=False):
         t_comp = self.get_time_flops(flops)
         t_mem  = self.get_time_mem(mem)
         t_compute = max(t_comp, t_mem)
@@ -1074,13 +1185,18 @@ class LogitsSumma(Estimates):
             comm_size = comm_sizes[c]
             comm_type = comm_types[c]
             comm_top = comm_tops[c]
-            # we are tracking total comm vols across n_b itrs
-            t_for_nb_comms = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
-            t_for_one_comm_set += t_for_nb_comms / self.n_b 
+#            t_for_nb_comms = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+#            t_for_one_comm_set += t_for_nb_comms / self.n_b 
+
+            # for any comm, divide by n_b for each itr (do it this way because of the comm latencies)
+            t_for_one_comm_set += self.get_time_comm(comm / self.n_b, comm_size, comm_type, comm_top)  
+
 
         # overlap some comms with compute
         t_comm = t_for_one_comm_set + max(t_for_one_comm_set * self.n_b - t_compute, 0)
         t = t_compute + t_comm
+        if verbose:
+            print(t_compute, t_comp, t_mem, flops, mem, t_comm, t_for_one_comm_set, t_for_one_comm_set * self.n_b)
         return t, t_comm, intensity
 
     def compute_time(self): # need to overwrite to implement pipelined/overlapping comms
@@ -1153,7 +1269,8 @@ class AttendSumma(Estimates):
         activation_buffer = (b * h * l_local_2 * l_local_1 * (not remat) + b * h * l_local_2 * q_local) * element_size # store for bwd pass
         weights_mem = 0 
         # careful, nb is arbitrarily chosen here
-        nb = l // 512 if m1 != m2 else m1
+        nb = self.system['summa_nb']
+#        nb = l // 512 if m1 != m2 else m1
         self.n_b = nb
         mem_fwd  = (b * h * l_local_2 * l + b * h * l * q_local + b * h * l_local_2 * q_local * nb) * element_size
 
@@ -1204,7 +1321,7 @@ class AttendSumma(Estimates):
                        comm_bwd_topology = comm_bwd_topology)
 
 
-    def compute_time_summa(self, flops, mem, comms, comm_sizes, comm_types, comm_tops):
+    def compute_time_summa(self, flops, mem, comms, comm_sizes, comm_types, comm_tops, verbose=False):
         t_comp = self.get_time_flops(flops)
         t_mem  = self.get_time_mem(mem)
         t_compute = max(t_comp, t_mem)
@@ -1216,13 +1333,18 @@ class AttendSumma(Estimates):
             comm_size = comm_sizes[c]
             comm_type = comm_types[c]
             comm_top = comm_tops[c]
-            # we are tracking total comm vols across n_b itrs
-            t_for_nb_comms = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
-            t_for_one_comm_set += t_for_nb_comms / self.n_b 
+#            t_for_nb_comms = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+#            t_for_one_comm_set += t_for_nb_comms / self.n_b 
+
+            # for any comm, divide by n_b for each itr (do it this way because of the comm latencies)
+            t_for_one_comm_set += self.get_time_comm(comm / self.n_b, comm_size, comm_type, comm_top)  
+
 
         # overlap some comms with compute
         t_comm = t_for_one_comm_set + max(t_for_one_comm_set * self.n_b - t_compute, 0)
         t = t_compute + t_comm
+        if verbose:
+            print(t_compute, t_comp, t_mem, flops, mem, t_comm, t_for_one_comm_set, t_for_one_comm_set * self.n_b)
         return t, t_comm, intensity
 
     def compute_time(self): # need to overwrite to implement pipelined/overlapping comms
