@@ -11,6 +11,7 @@
 "ib_latency": 1e-05,
 "nvlink_size": 64, 
 "empirical": false, 
+"summa_nb": 4,
 "element_size": 2e-09, 
 "mask_element_size": 1e-09, 
 "flops_units": 1e-12}
