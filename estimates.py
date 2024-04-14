@@ -61,9 +61,13 @@ class Estimates():
                       "activation_buffer": self.activation_buffer * (not remat),
                       "comm_fwd": self.comm_fwd,
                       "comm_fwd_type": self.comm_fwd_type,
+                      "comm_fwd_size": self.comm_fwd_size,
+                      "comm_fwd_topology": self.comm_fwd_topology,
                       "flops_bwd": self.flops_bwd,
                       "comm_bwd": self.comm_bwd,
-                      "comm_bwd_type": self.comm_bwd_type}
+                      "comm_bwd_type": self.comm_bwd_type,
+                      "comm_bwd_size": self.comm_bwd_size,
+                      "comm_bwd_topology": self.comm_bwd_topology}
 
     def get_stats(self):
         return self.stats
@@ -73,15 +77,14 @@ class Estimates():
         t_mem = self.get_time_mem(mem)
         intensity = t_comp / t_mem
         t_comm = self.get_time_comm(comm, comm_size, comm_type, comm_topology)  
-        return max(t_comp, t_mem) + t_comm, t_comm, intensity
+        return max(t_comp, t_mem) + t_comm, t_comm, t_comp, t_mem, intensity
+        t, t_comm, t_comp, t_mem, intensity
 
     def compute_time(self):
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.get_time(self.flops_fwd, self.mem_fwd, 
-                                                                                     self.comm_fwd, self.comm_fwd_size,
-                                                                                     self.comm_fwd_type, self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.get_time(self.flops_bwd, self.mem_bwd, 
-                                                                                     self.comm_bwd, self.comm_bwd_size,
-                                                                                     self.comm_bwd_type, self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
+        self.get_time(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size, self.comm_fwd_type, self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
+        self.get_time(self.flops_bwd, self.mem_bwd, self.comm_bwd, self.comm_bwd_size, self.comm_bwd_type, self.comm_bwd_topology)
         if self.recompute:
             self.stats['t_bwd'] += self.stats['t_fwd']
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
