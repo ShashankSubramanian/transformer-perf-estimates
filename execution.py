@@ -264,7 +264,7 @@ def execute_2d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
                 continue # not feasible
             if verbose:
                 print("mbs = {}, dp = {}, tp1 = {}, tp2 = {}, nv1 = {}, nv2= {}, nb = {},  pp = {}, t = {}, tput = {}, mem = {}".format(mbs, dp, tp1, tp2, n1, n2, nb, pp, ttot_time, throughput, mem))
-            c = {'dp': dp, 'tp': tp, 'tp1': tp1, 'tp2': tp2, 'pp': pp, 'mbs': mbs, 'nb': nb}
+            c = {'dp': dp, 'tp': tp, 'tp1': tp1, 'tp2': tp2, 'n1': n1, 'n2': n2,'pp': pp, 'mbs': mbs, 'nb': nb}
             stats = {'t': tot_time, 't_com': t_comm, 't_mem': t_mem, 't_comp': t_comp, 
                      'mem': mem, 'wts': wts, 'wts_grad': wts_grad, 'wts_optimizer_states': wts_optimizer_states, 
                      'acts': acts, 'comm_fwd': comm_fwd, 'comm_bwd': comm_bwd, 'flops_fwd': flops_fwd, 'flops_bwd': flops_bwd}
