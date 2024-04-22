@@ -33,31 +33,33 @@ def compute_stats(global_batch_size,config_type,n_gpus,nvs_list,model, model_str
     throughputs = {}
     stats = {}
     confs = {}
+    ngpus={}
 
     start = None
     
     for nvs in nvs_list:
-        throughputs[nvs] = []
-        stats[nvs] = []
-        confs[nvs] = []
+        throughputs[nvs] = {}
+        stats[nvs] = {}
+        confs[nvs] = {}
         start = None
         system['nvlink_size'] = nvs
     
         configs = execute_function(model, n_gpus, global_batch_size=global_batch_size, \
                                    system=system, verbose=verbose, nlargest=nlargest)
-        for s,config in enumerate(configs):
-            if len(config) > 0: # check feasibility
-                if not start:
-                    start = s
-                throughput, stat, _, conf = config[0]
-
-                throughputs[nvs].append(throughput)
-                stats[nvs].append(stats)
-                confs[nvs].append(conf)
-
-        n_gpus = n_gpus[start:]
+        ngpus[nvs]=sorted(configs.keys())
+      
+        
+        for n in ngpus[nvs]:
+            throughputs[nvs][n]=[]
+            stats[nvs][n]=[]
+            confs[nvs][n]=[]
+            for conf in configs[n]:
+                throughputs[nvs][n].append(conf[0])
+                stats[nvs][n].append(conf[1])
+                confs[nvs][n].append(conf[3])
+        
     np.savez('outputs/exec_'+exec_model+'_model_'+str(model_str)+'_config_'+config_type+'.npz', \
-         confs=confs, stats=stats, throughputs = throughputs, ngpus=n_gpus, global_batch_size=global_batch_size)
+         confs=confs, stats=stats, throughputs = throughputs, ngpus=ngpus, global_batch_size=global_batch_size)
     
 def parse_args():
 

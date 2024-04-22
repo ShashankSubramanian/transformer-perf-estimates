@@ -165,7 +165,7 @@ def totals(df_mlp, df_sa, depth, pp=1, dp=1, number_micro_batches=1, verbose=Fal
     return (t, t_comm, t_mem, t_comp, mem,  wts, wts_grad, wts_optimizer_states, acts, comm_fwd, comm_bwd, flops_fwd, flops_bwd)
 
 def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=True, nlargest=10):
-    configs = []
+    configs = {}
 
     l = model['l']
     e = model['e']
@@ -174,6 +174,7 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=True, n
     depth = model['depth']
     capacity = system['hbm_capacity']
     nvs = system['nvlink_size']
+    
 
     for n in n_gpus:
         cands = []
@@ -209,12 +210,15 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=True, n
                      'acts': acts, 'comm_fwd': comm_fwd, 'comm_bwd': comm_bwd, 'flops_fwd': flops_fwd, 'flops_bwd': flops_bwd}
             modules = {'mpl': df_mlp, 'sa': df_sa}
             configs_per_n.append((throughput, stats, modules, c))
-        configs.append(heapq.nlargest(nlargest, configs_per_n, key=lambda ky:ky[0]))
+        tmp_config=heapq.nlargest(nlargest, configs_per_n, key=lambda ky:ky[0])
+        
+        if len(tmp_config):
+            configs[n]=tmp_config
 
     return configs
 
 def execute_2d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, nlargest=10):
-    configs = []
+    configs = {}
 
     l = model['l']
     e = model['e']
@@ -270,6 +274,10 @@ def execute_2d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
                      'acts': acts, 'comm_fwd': comm_fwd, 'comm_bwd': comm_bwd, 'flops_fwd': flops_fwd, 'flops_bwd': flops_bwd}
             modules = {'mpl': df_mlp, 'sa': df_sa}
             configs_per_n.append((throughput, stats, modules, c))
-        configs.append(heapq.nlargest(nlargest, configs_per_n, key=lambda ky:ky[0]))
+        tmp_config=heapq.nlargest(nlargest, configs_per_n, key=lambda ky:ky[0])
+        
+        if len(tmp_config):
+            configs[n]=tmp_config
+
     return configs
 
