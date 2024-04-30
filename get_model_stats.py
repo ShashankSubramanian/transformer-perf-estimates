@@ -1,6 +1,6 @@
 import numpy as np
 import json
-from execution import execute_1d, execute_2d
+from execution_analysis import execute_1d, execute_2d
 import argparse
 
 
@@ -21,7 +21,7 @@ models= {'gpt2': gpt2, 'gpt3': gpt3, 'gpt3_1T': gpt3_1T, 'gpt3_lowdepth': gpt3_l
 
 
 
-def compute_stats(global_batch_size,config_type,n_gpus,nvs_list,model, model_str, exec_model,nlargest,verbose):
+def compute_stats(global_batch_size, config_type, n_gpus, nvs_list, model, model_str, exec_model, lfactor, efactor, dfactor, nlargest, verbose):
     if exec_model == '1d':
         execute_function = execute_1d
     elif exec_model == '2d':
@@ -57,8 +57,8 @@ def compute_stats(global_batch_size,config_type,n_gpus,nvs_list,model, model_str
                 throughputs[nvs][n].append(conf[0])
                 stats[nvs][n].append(conf[1])
                 confs[nvs][n].append(conf[3])
-        
-    np.savez('outputs/exec_'+exec_model+'_model_'+str(model_str)+'_config_'+config_type+'.npz', \
+      
+    np.savez('outputs/exec_'+exec_model+'_model_'+str(model_str)+'_config_'+config_type+'_lfactor_'+str(lfactor)+'_efactor_'+str(efactor)+'_dfactor_'+str(dfactor)+'.npz', \
          confs=confs, stats=stats, throughputs = throughputs, ngpus=ngpus, global_batch_size=global_batch_size)
     
 def parse_args():
@@ -73,6 +73,9 @@ def parse_args():
     parser.add_argument("--f_multiple", default=4, type=int, help="f = multiple * e for the LLM")
     parser.add_argument("--parallel_option", default='1d', type=str, help="tensor parallelization strategy")
     parser.add_argument("--top_n", default=10, type=int, help="how many top results to store")
+    parser.add_argument("--lfactor", default=0, type=int, help="2^i x l")
+    parser.add_argument("--efactor", default=0, type=int, help="2^i x e")
+    parser.add_argument("--dfactor", default=0, type=int, help="2^i x depth")
     parser.add_argument("--verbose", default=False, type=bool, help="whether to print results for intermediate steps")
     
     
@@ -89,12 +92,19 @@ def main():
     config_type=args.config_type
     model_str = args.LLM_model
     model = models[model_str]
+    if args.efactor>0:
+        model['e'] = 2**args.efactor * model['e']
     model['f'] = args.f_multiple * model['e']
+    if args.dfactro>0:
+        model['depth'] = 2**args.dfactor * model['depth']
+    if args.lfactor>0:
+        model['l'] = 2**args.lfactor*model['l']
+        print(model['l'])
     exec_model = args.parallel_option
     nlargest = args.top_n
     verbose = args.verbose
     
-    compute_stats(global_batch_size,config_type,n_gpus,nvs_list,model, model_str, exec_model, nlargest, verbose)
+    compute_stats(global_batch_size,config_type,n_gpus,nvs_list,model, model_str, exec_model, args.lfactor, args.efactor, args.dfactor, nlargest, verbose)
     
 if __name__ == "__main__":
     main()
