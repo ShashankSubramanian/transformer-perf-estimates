@@ -68,104 +68,28 @@ def summa_nb_candidates(tp1, tp2, embed):
     for c in nb_range:
             yield c
 
-def module_stats(df,precision=16):
-    coms={}
-    for index ,row in df[['comm_fwd','comm_fwd_type']].iterrows():
-        com_size, com_type = row['comm_fwd'], row['comm_fwd_type']
-        if com_size>0 and com_type != 'none':
-            if com_type not in coms:
-                coms[com_type]=[np.round(com_size,precision)]
-            else:
-                coms[com_type].append(np.round(com_size,precision))
-                
-    for index ,row in df[['comm_bwd','comm_bwd_type']].iterrows():
-        com_size, com_type = row['comm_bwd'], row['comm_bwd_type']
-        if com_size>0 and com_type != 'none':
-            if com_type not in coms:
-                coms[com_type]=[np.round(com_size,precision)]
-            else:
-                coms[com_type].append(np.round(com_size,precision))
-    com_stats=[]
-    for key in coms:
-        # com_stats.append([key,np.quantile(coms[key],0.25),np.quantile(coms[key],0.5),np.quantile(coms[key],0.75)])
-        com_stats.append([key,coms[key]])
-    return com_stats
-
-
-
 def totals(df_mlp, df_sa, depth, pp=1, dp=1, number_micro_batches=1, verbose=False):
     # time
-    # total time
     t = (df_mlp['t_fwd'].sum() + df_mlp['t_bwd'].sum() + df_sa['t_fwd'].sum() + df_sa['t_bwd'].sum()) * number_micro_batches # local_batch_size images
-    t *= (depth // pp) # (tf + tb) * m
+    t *= depth // pp # (tf + tb) * m
     bubble_time = (pp - 1) * (t / number_micro_batches)  # but not ideal
     t += bubble_time # add this
     if verbose:
         print('time for 1 itr = {}'.format(t))
-    # time comm
-    t_comm = (df_mlp['t_fwd_comm'].sum() + df_mlp['t_bwd_comm'].sum() + df_sa['t_fwd_comm'].sum() + df_sa['t_bwd_comm'].sum()) * number_micro_batches # local_batch_size images
-    t_comm *= depth // pp # (tf + tb) * m
-    bubble_time_comm = (pp - 1) * (t_comm / number_micro_batches)  # but not ideal
-    t_comm += bubble_time_comm # add this
-    
-    # time comp
-    t_comp = (df_mlp['t_fwd_comp'].sum() + df_mlp['t_bwd_comp'].sum() + df_sa['t_fwd_comp'].sum() + df_sa['t_bwd_comp'].sum()) * number_micro_batches # local_batch_size images
-    t_comp *= (depth // pp) # (tf + tb) * m
-    bubble_time_comp = (pp - 1) * (t_comp / number_micro_batches)  # but not ideal
-    t_comp += bubble_time_comp # add this
-
-    # time mem
-    t_mem = (df_mlp['t_fwd_mem'].sum() + df_mlp['t_bwd_mem'].sum() + df_sa['t_fwd_mem'].sum() + df_sa['t_bwd_mem'].sum()) * number_micro_batches # local_batch_size images
-    t_mem *= (depth // pp) # (tf + tb) * m
-    bubble_time_mem = (pp - 1) * (t_mem / number_micro_batches)  # but not ideal
-    t_mem += bubble_time_mem # add this
-    
     # mem
     wts = (df_mlp['weights_mem'].sum() + df_sa['weights_mem'].sum()) * (depth // pp) # not a function of batch size
-    wts_grad = (wts // dp)
+    wts_grad = wts // dp
     wts_optimizer_states = 6 * (wts // dp) # 2wts for fp32 copy of weights, mom, variance
     acts = (df_mlp['activation_buffer'].sum() + df_sa['activation_buffer'].sum()) * (depth // pp) # store microbatch of acts
     # assume 1F1B
     acts *= pp # at most pp stages of acts need to be maintained for this so not multiplied by number of micro batches
     mem = wts + wts_grad + wts_optimizer_states + acts
-
-    # comms
-    # fwd
-    df_mlp['comm_fwd_per_gpu']=df_mlp.apply(lambda x: np.array(x['comm_fwd'])/(np.array(x['comm_fwd_size']) \
-                                                                +1e-16*np.ones_like(x['comm_fwd_size'])),axis=1)
-    df_mlp['comm_fwd_per_gpu']=df_mlp.apply(lambda x: np.sum(x['comm_fwd_per_gpu']), axis=1)
-    comm_fwd = df_mlp['comm_fwd_per_gpu'].sum()
-
-    df_sa['comm_fwd_per_gpu']=df_sa.apply(lambda x: np.array(x['comm_fwd'])/(np.array(x['comm_fwd_size']) \
-                                                                +1e-16*np.ones_like(x['comm_fwd_size'])),axis=1)
-    df_sa['comm_fwd_per_gpu']=df_sa.apply(lambda x: np.sum(x['comm_fwd_per_gpu']), axis=1)
-    comm_fwd += df_sa['comm_fwd_per_gpu'].sum()
-
-    comm_fwd *= (depth // pp) # communication volume per gpu fwd
-
-    # bwd
-    df_mlp['comm_bwd_per_gpu']=df_mlp.apply(lambda x: np.array(x['comm_bwd'])/(np.array(x['comm_bwd_size']) \
-                                                                +1e-16*np.ones_like(x['comm_bwd_size'])),axis=1)
-    df_mlp['comm_bwd_per_gpu']=df_mlp.apply(lambda x: np.sum(x['comm_bwd_per_gpu']), axis=1)
-    comm_bwd = df_mlp['comm_bwd_per_gpu'].sum()
-
-    df_sa['comm_bwd_per_gpu']=df_sa.apply(lambda x: np.array(x['comm_bwd'])/(np.array(x['comm_bwd_size']) \
-                                                                +1e-16*np.ones_like(x['comm_bwd_size'])),axis=1)
-    df_sa['comm_bwd_per_gpu']=df_sa.apply(lambda x: np.sum(x['comm_bwd_per_gpu']), axis=1)
-    comm_bwd += df_sa['comm_bwd_per_gpu'].sum()
-
-    comm_bwd *= (depth // pp) # communication volume per gpu bwd
-
-    # comps
-    flops_fwd = (df_mlp['flops_fwd'].sum() + df_sa['flops_fwd'].sum()) * (depth // pp)
-    flops_bwd = (df_mlp['flops_bwd'].sum() + df_sa['flops_bwd'].sum()) * (depth // pp)
-    
     if verbose:
         print('mem consumed = {}'.format(mem))
-    return (t, t_comm, t_mem, t_comp, mem,  wts, wts_grad, wts_optimizer_states, acts, comm_fwd, comm_bwd, flops_fwd, flops_bwd)
+    return (t, mem)
 
-def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=True, nlargest=10):
-    configs = {}
+def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, nlargest=10):
+    configs = []
 
     l = model['l']
     e = model['e']
@@ -174,7 +98,6 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=True, n
     depth = model['depth']
     capacity = system['hbm_capacity']
     nvs = system['nvlink_size']
-    
 
     for n in n_gpus:
         cands = []
@@ -198,27 +121,20 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=True, n
             b = mbs # time one microbatch: careful
             df_mlp = mlp_1d(b, l, e, f, parallelism={'m': m1}, topology={'t': t1},  system=system)
             df_sa = sa_1d(b, l, e, h, parallelism={'m': m1}, topology={'t': t1}, flash_attention=True, system=system)
-            (tot_time, t_comm, t_mem, t_comp, mem,  wts, wts_grad, wts_optimizer_states, acts, comm_fwd, comm_bwd, flops_fwd, flops_bwd) = totals(df_mlp, df_sa, depth, pp=pp, dp=dp, number_micro_batches=local_batch_size//mbs)
-            throughput = global_batch_size / tot_time
+            (t, mem) = totals(df_mlp, df_sa, depth, pp=pp, dp=dp, number_micro_batches=local_batch_size//mbs)
+            throughput = global_batch_size / t
             if mem > capacity:
                 continue # not feasible
             if verbose:
-                print("mbs = {}, dp = {}, tp = {}, pp = {}, t = {}, tput = {}, mem = {}".format(mbs, dp, tp, pp, tot_time, throughput, mem))
+                print("mbs = {}, dp = {}, tp = {}, pp = {}, t = {}, tput = {}, mem = {}".format(mbs, dp, tp, pp, t, throughput, mem))
             c = {'dp': dp, 'tp': tp, 'pp': pp, 'mbs': mbs}
-            stats = {'t': tot_time, 't_com': t_comm, 't_mem': t_mem, 't_comp': t_comp, 
-                     'mem': mem, 'wts': wts, 'wts_grad': wts_grad, 'wts_optimizer_states': wts_optimizer_states, 
-                     'acts': acts, 'comm_fwd': comm_fwd, 'comm_bwd': comm_bwd, 'flops_fwd': flops_fwd, 'flops_bwd': flops_bwd}
-            modules = {'mpl': df_mlp, 'sa': df_sa}
-            configs_per_n.append((throughput, stats, modules, c))
-        tmp_config=heapq.nlargest(nlargest, configs_per_n, key=lambda ky:ky[0])
-        
-        if len(tmp_config):
-            configs[n]=tmp_config
+            configs_per_n.append((throughput, mem, c))
+        configs.append(heapq.nlargest(nlargest, configs_per_n, key=lambda ky:ky[0]))
 
     return configs
 
 def execute_2d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, nlargest=10):
-    configs = {}
+    configs = []
 
     l = model['l']
     e = model['e']
@@ -262,22 +178,14 @@ def execute_2d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
             b = mbs #local_batch_size
             df_mlp = mlp_2d(b, l, e, f, parallelism={'m1': m1, 'm2': m2}, topology={'t1': t1, 't2': t2}, system=system)
             df_sa = sa_2d_seqp(b, l, e, h, parallelism={'m1': m1, 'm2': m2}, topology={'t1': t1, 't2': t2}, flash_attention=True, system=system)
-            (tot_time, t_comm, t_mem, t_comp, mem,  wts, wts_grad, wts_optimizer_states, acts, comm_fwd, comm_bwd, flops_fwd, flops_bwd) = totals(df_mlp, df_sa, depth, pp=pp, dp=dp, number_micro_batches=local_batch_size//mbs)
-            throughput = global_batch_size / tot_time
+            (t, mem) = totals(df_mlp, df_sa, depth, pp=pp, dp=dp, number_micro_batches=local_batch_size//mbs)
+            throughput = global_batch_size / t
             if mem > capacity:
                 continue # not feasible
             if verbose:
-                print("mbs = {}, dp = {}, tp1 = {}, tp2 = {}, nv1 = {}, nv2= {}, nb = {},  pp = {}, t = {}, tput = {}, mem = {}".format(mbs, dp, tp1, tp2, n1, n2, nb, pp, ttot_time, throughput, mem))
-            c = {'dp': dp, 'tp': tp, 'tp1': tp1, 'tp2': tp2, 'n1': n1, 'n2': n2,'pp': pp, 'mbs': mbs, 'nb': nb}
-            stats = {'t': tot_time, 't_com': t_comm, 't_mem': t_mem, 't_comp': t_comp, 
-                     'mem': mem, 'wts': wts, 'wts_grad': wts_grad, 'wts_optimizer_states': wts_optimizer_states, 
-                     'acts': acts, 'comm_fwd': comm_fwd, 'comm_bwd': comm_bwd, 'flops_fwd': flops_fwd, 'flops_bwd': flops_bwd}
-            modules = {'mpl': df_mlp, 'sa': df_sa}
-            configs_per_n.append((throughput, stats, modules, c))
-        tmp_config=heapq.nlargest(nlargest, configs_per_n, key=lambda ky:ky[0])
-        
-        if len(tmp_config):
-            configs[n]=tmp_config
-
+                print("mbs = {}, dp = {}, tp1 = {}, tp2 = {}, nv1 = {}, nv2= {}, nb = {},  pp = {}, t = {}, tput = {}, mem = {}".format(mbs, dp, tp1, tp2, n1, n2, nb, pp, t, throughput, mem))
+            c = {'dp': dp, 'tp': tp, 'tp1': tp1, 'tp2': tp2, 'pp': pp, 'mbs': mbs, 'nb': nb}
+            configs_per_n.append((throughput, mem, c))
+        configs.append(heapq.nlargest(nlargest, configs_per_n, key=lambda ky:ky[0]))
     return configs
 
