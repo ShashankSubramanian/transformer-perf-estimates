@@ -1,7 +1,12 @@
+from mpi4py import MPI
 import numpy as np
 import json
 from execution_analysis import execute_1d, execute_2d
 import argparse
+
+comm = MPI.COMM_WORLD
+size = comm.Get_size()
+rank = comm.Get_rank()
 
 
 # models
@@ -19,8 +24,89 @@ models= {'gpt2': gpt2, 'gpt3': gpt3, 'gpt3_1T': gpt3_1T, 'gpt3_lowdepth': gpt3_l
          'vit_era5': vit_era5, 'vit_era5_big': vit_era5_big, 'vit_era5_1px': vit_era5_1px, 'vit_era5_1px_big': vit_era5_1px_big}
 
 
+def execute_mpi(execute_func, model, n_gpus, global_batch_size=2048, system={}, verbose=False, nlargest=10):
+    per_rank = len(n_gpus)//size
+    remainder = len(n_gpus) - size * per_rank
+    configs = execute_func(model, n_gpus[rank*per_rank:(rank+1)*per_rank], global_batch_size, system, verbose, nlargest)
+    comm.Barrier()
+    for i in range(1,size):
+        comm.send(configs,dest=0,tag=13)
+    if rank == 0:
+        for i in range(1,size):
+            tmp = comm.recv(source=i,tag=13)
+            configs.update(tmp)
+        if remainder>0:
+            tmp = execute_func(model, n_gpus[size*per_rank:], global_batch_size, system, verbose, nlargest)
+            configs.update(tmp)
+        return configs
+    else:
+        return
 
+
+def compute_stats_mpi(system,global_batch_size, config_type, n_gpus, nvs_list, model, model_str, exec_model, lfactor, efactor, dfactor, nlargest, verbose):
+#     print(rank)
+    per_rank = len(n_gpus)//size
+    remainder = len(n_gpus) - size * per_rank
+    
+    nvs_rank = nvs_list[rank*per_rank:(rank+1)*per_rank]
+    print(str(rank)+ ' begin')
+    configs = compute_stats(system, global_batch_size, config_type, n_gpus, nvs_rank, model, model_str, exec_model, lfactor, efactor, dfactor, nlargest, verbose)
+    print(str(rank)+ ' finished')
+    comm.Barrier()
+    for i in range(1,size):
+        comm.send(configs,dest=0,tag=13)
+    if rank == 0:
+        for i in range(1,size):
+            tmp = comm.recv(source=i,tag=13)
+            configs.update(tmp)
+        if remainder>0:
+            tmp = compute_stats(system, global_batch_size, config_type, n_gpus, nvs_list[size*per_rank:], model, model_str, exec_model, lfactor, efactor, dfactor, nlargest, verbose)
+            configs.update(tmp)
+        
+        throughputs = {}
+        stats = {}
+        confs = {}
+        ngpus={}
+        
+        for nvs in nv_list:
+            throughputs[nvs] = {}
+            stats[nvs] = {}
+            confs[nvs] = {}
+        
+            ngpus[nvs]=sorted(configs[nvs].keys())
+      
+        
+            for n in ngpus[nvs]:
+                throughputs[nvs][n]=[]
+                stats[nvs][n]=[]
+                confs[nvs][n]=[]
+                for conf in configs[nvs][n]:
+                    throughputs[nvs][n].append(conf[0])
+                    stats[nvs][n].append(conf[1])
+                    confs[nvs][n].append(conf[3])
+        np.savez('outputs/exec_'+exec_model+'_model_'+str(model_str)+\
+                             '_config_'+config_type+'_lfactor_'+str(lfactor)+'_efactor_'+\
+                             str(efactor)+'_dfactor_'+str(dfactor)+'.npz', \
+                             confs=confs, stats=stats, throughputs = throughputs, ngpus=ngpus, \
+                             global_batch_size=global_batch_size)
+ 
+    
 def compute_stats(system, global_batch_size, config_type, n_gpus, nvs_list, model, model_str, exec_model, lfactor, efactor, dfactor, nlargest, verbose):
+    if exec_model == '1d':
+        execute_function = execute_1d
+    elif exec_model == '2d':
+        execute_function = execute_2d
+    
+    configs={}
+    for nvs in nvs_list:
+        system['nvlink_size'] = nvs
+    
+        configs[nvs] = execute_function(model, n_gpus, global_batch_size=global_batch_size, \
+                                   system=system, verbose=verbose, nlargest=nlargest)
+    return configs
+    
+
+def compute_stats_serial(system, global_batch_size, config_type, n_gpus, nvs_list, model, model_str, exec_model, lfactor, efactor, dfactor, nlargest, verbose):
     if exec_model == '1d':
         execute_function = execute_1d
     elif exec_model == '2d':
@@ -63,7 +149,7 @@ def parse_args():
 
     parser = argparse.ArgumentParser()
     
-    parser.add_argument("--global_batch_size", default=4096, type=int, help="gobal batch size")#4096
+    parser.add_argument("--global_batch_size", default=4096, type=int, help="gobal batch size")
     parser.add_argument("--config_type", default='A100', type=str, help="the gpu type")
     parser.add_argument("--ngpus_index", default=14, type=int, help="the max number of gpus for the system as a power of 2")
     parser.add_argument("--nv_index", default=7, type=float, help="the max number of gpus for NVLink domain as a power of 2")
@@ -74,7 +160,7 @@ def parse_args():
     parser.add_argument("--lfactor", default=1, type=int, help=" factor times l")
     parser.add_argument("--efactor", default=1, type=int, help="factor times e")
     parser.add_argument("--dfactor", default=1, type=int, help="factor times depth")
-    parser.add_argument("--verbose", default=True, type=bool, help="whether to print results for intermediate steps")
+    parser.add_argument("--verbose", default=False, type=bool, help="whether to print results for intermediate steps")
     
     
     args = parser.parse_args()
@@ -104,7 +190,7 @@ def main():
     with open('config-'+config_type+'.json', 'r') as file:
         system = json.load(file)
     
-    compute_stats(system,global_batch_size,config_type,n_gpus,nvs_list,model, model_str, exec_model, args.lfactor, args.efactor, args.dfactor, nlargest, verbose)
+    compute_stats_mpi(system,global_batch_size,config_type,n_gpus,nvs_list,model, model_str, exec_model, args.lfactor, args.efactor, args.dfactor, nlargest, verbose)
     
 if __name__ == "__main__":
     main()
