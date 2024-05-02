@@ -189,7 +189,8 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=True, n
                     c = (dp, tp, pp, micro_batch_size)
                     if c not in cands: # some duplicate configs due to max pipelining
                         cands.append(c)
-
+        if verbose:
+            print('n = '+str(n)+', cands = '+str(len(cands)))
         for (dp, tp, pp, mbs) in cands:
             m1 = tp
             t1 = m1 if tp <= nvs else nvs # topology: num gpus in nvdomain is all if nvdomain is bigger, else use complete nvdomain
@@ -215,7 +216,7 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=True, n
         if len(tmp_config):
             configs[n]=tmp_config
 
-    return configs
+    return configs 
 
 def execute_2d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, nlargest=10):
     configs = {}
@@ -280,4 +281,5 @@ def execute_2d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
             configs[n]=tmp_config
 
     return configs
+
 
