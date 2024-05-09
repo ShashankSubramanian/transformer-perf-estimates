@@ -213,7 +213,7 @@ def mlp_seqp(b, l, e, f, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none',
     t2 = topology['t2']
 
     ######################################################################################################################################################
-    fc1 = LinearSeqp('fc1', b, l, e, f, parallelism={'dim1': 1, 'dim2': m1, 'dimseq': m2}, topology={'t1': 'none', 't2': t1, 'tseq': t2}, system=system)
+    fc1 = LinearSeqp('fc1', b, l, e, f, parallelism={'dim1': 1, 'dim2': m1, 'dimseq': m2}, topology={'t1': 1, 't2': t1, 'tseq': t2}, system=system)
     summary.append(fc1.get_stats())
     ######################################################################################################################################################
     fc1_bias = Bias('fc1-bias', b, l, f, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
@@ -225,10 +225,10 @@ def mlp_seqp(b, l, e, f, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none',
     dpr1 = DropOut('dpr1', b * (l // m2) * (f // m1), system=system)
     summary.append(dpr1.get_stats())
     ######################################################################################################################################################
-    fc2 = LinearSeqp('fc2', b, l, f, e, parallelism={'dim1': m1, 'dim2': 1, 'dimseq': m2}, topology={'t1': t1, 't2': 'none', 'tseq': t2}, system=system)
+    fc2 = LinearSeqp('fc2', b, l, f, e, parallelism={'dim1': m1, 'dim2': 1, 'dimseq': m2}, topology={'t1': t1, 't2': 1, 'tseq': t2}, system=system)
     summary.append(fc2.get_stats())
     ######################################################################################################################################################
-    fc2_bias = Bias('fc2-bias', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
+    fc2_bias = Bias('fc2-bias', b, (l // m2), e, parallelism={'dim1': m1, 'dim2': 1}, topology={'t1': t1, 't2': 1}, system=system)
     summary.append(fc2_bias.get_stats())
     ######################################################################################################################################################
     dpr2 = DropOut('dpr2', b * (l // (m1 * m2)) * e, system=system)
@@ -594,7 +594,7 @@ def sa_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 
 
     ######################################################################################################################################################
     qkv = LinearSeqp('qkv', b, l, e, (3 * e), parallelism={'dim1': 1, 'dim2': m1, 'dimseq': m2}, topology={'t1': 'none', 't2': t1, 'tseq': t2}, system=system)
-    summary.append(fc1.get_stats())
+    summary.append(qkv.get_stats())
     ######################################################################################################################################################
     if flash_attention:
         ######################################################################################################################################################
@@ -616,7 +616,7 @@ def sa_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 
         summary.append(attend.get_stats())
         ######################################################################################################################################################
     vproj = LinearSeqp('vproj', b, l, e, e, parallelism={'dim1': m1, 'dim2': 1, 'dimseq': m2}, topology={'t1': t1, 't2': 'none', 'tseq': t2}, system=system)
-    summary.append(fc2.get_stats())
+    summary.append(vproj.get_stats())
     ######################################################################################################################################################
     vproj_bias = Bias('vproj-bias', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(vproj_bias.get_stats())
