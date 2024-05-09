@@ -441,10 +441,11 @@ class Bias(Estimates):
         mem_bwd = (b * l_local * f_local + 1 * f_local) * element_size
 
         # comms
-        comm_bwd = m2_parallel * (f_local) * element_size # allreduce bias
-        comm_bwd_type = "allreduce"
-        comm_bwd_size = m2
-        comm_bwd_topology = t2
+        # these comms will get overlapped I think
+#        comm_bwd = m2_parallel * (f_local) * element_size # allreduce bias
+#        comm_bwd_type = "allreduce"
+#        comm_bwd_size = m2
+#        comm_bwd_topology = t2
 
         self.set_stats(name,
                        flops_fwd = flops_fwd,
@@ -454,11 +455,11 @@ class Bias(Estimates):
                        weights_mem = weights_mem,
                        weights_grad_mem = weights_grad_mem,
                        flops_bwd = flops_bwd,
-                       mem_bwd = mem_bwd,
-                       comm_bwd = comm_bwd, 
-                       comm_bwd_type = comm_bwd_type,
-                       comm_bwd_size = comm_bwd_size,
-                       comm_bwd_topology = comm_bwd_topology)
+                       mem_bwd = mem_bwd)
+#                       comm_bwd = comm_bwd, 
+#                       comm_bwd_type = comm_bwd_type,
+#                       comm_bwd_size = comm_bwd_size,
+#                       comm_bwd_topology = comm_bwd_topology)
 
     def get_stats(self):
         self.compute_time()
