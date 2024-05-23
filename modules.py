@@ -594,7 +594,7 @@ def sa_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 1, 't2':
 
     ######################################################################################################################################################
     qkv = LinearSeqp('qkv', b, l, e, (3 * e), parallelism={'dim1': 1, 'dim2': m1, 'dimseq': m2}, topology={'t1': 1, 't2': t1, 'tseq': t2}, system=system)
-    summary.append(fc1.get_stats())
+    summary.append(qkv.get_stats())
     ######################################################################################################################################################
     if flash_attention:
         ######################################################################################################################################################
@@ -616,7 +616,7 @@ def sa_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 1, 't2':
         summary.append(attend.get_stats())
         ######################################################################################################################################################
     vproj = LinearSeqp('vproj', b, l, e, e, parallelism={'dim1': m1, 'dim2': 1, 'dimseq': m2}, topology={'t1': t1, 't2': 1, 'tseq': t2}, system=system)
-    summary.append(fc2.get_stats())
+    summary.append(vproj.get_stats())
     ######################################################################################################################################################
     vproj_bias = Bias('vproj-bias', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
     summary.append(vproj_bias.get_stats())

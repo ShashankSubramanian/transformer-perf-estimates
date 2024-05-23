@@ -78,7 +78,6 @@ class Estimates():
         intensity = t_comp / t_mem
         t_comm = self.get_time_comm(comm, comm_size, comm_type, comm_topology)  
         return max(t_comp, t_mem) + t_comm, t_comm, t_comp, t_mem, intensity
-        t, t_comm, t_comp, t_mem, intensity
 
     def compute_time(self):
         self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
@@ -101,7 +100,7 @@ class Estimates():
         hbm_bandwidth = self.system['hbm_bandwidth']
         t_mem = mem / hbm_bandwidth
         return t_mem
-
+ 
     def get_time_comm(self, vol, n_gpus, comm_type, topology):
         ''' time for communication 
             comm_type: 'allreduce', 'allgather', 'reducescatter', 'broadcast'
@@ -127,27 +126,30 @@ class Estimates():
         # define some pre-factors assuming bus bw from nccl perf docs
         # nodes here just means number of nvlink domains: careful
         nodes = n_gpus // topology # note topology controls how many gpus you are using in the nvlink domain
-        bw_corr_s = (nodes - 1) / nodes
-        bw_corr_f = (topology - 1) / topology
+        # ring correction 
+        correction = (n_gpus - 1) / n_gpus
 
-        # time is fast domain time + slow domain time
-        ts = bw_corr_s * (vol / topology) * (1 / bs) # slow time, do the comm on chunks of size N/nvs
-        tf = bw_corr_f * vol * (1 / bf) if bf != 0 else 0 # bf is zero if only 1 gpu in fast domain (which is no fast domain)
-        t_comm = ts + tf
-
-        if comm_type == 'allreduce':
-            t_comm *= 2
-
+        # root to all procs comms
         if comm_type in ['reduce', 'broadcast']:
-            if topology == 1:
+            if topology == 1: # all ib
                 t_comm = vol / bs
             elif nodes == 1:
                 t_comm = vol / bf # has nvlink and only one node
             else:
                 t_comm = max(vol / (topology * bs), vol / bf)
+        else:
+            # time is max(fast domain time, slow domain time)
+            ts = vol / (topology *  bs)
+            tf = vol / bf if bf != 0 else 0 # bf is zero if only 1 gpu in fast domain (which is no fast domain)
+            t_comm = correction * max(ts, tf) # will provision rings based on number of gpus per node
+
+            if comm_type == 'allreduce':
+                t_comm *= 2
+
 
 
         return t_comm
+
 
 
             

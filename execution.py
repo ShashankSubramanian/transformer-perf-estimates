@@ -28,6 +28,19 @@ def tp2d_candidates_dim2(n, tp1, sequence, embed):
         if c <= sequence and c <= embed: # for m2: use sequence or e/f
             yield c
 
+def tpseqp_candidates_dim1(n, heads, embed):
+    # candidates for tensor parallelism in seqp in 1st dim
+    for c in factors(n):
+        if c <= heads and c <= embed: # for m1: use heads or e/f
+            yield c
+
+def tpseqp_candidates_dim2(n, tp1, sequence):
+    # candidates for tensor parallelism in seqp in 2nd dim
+    tp2 = n // tp1 # use remaining for other dim (seq)
+    for c in factors(tp2):
+        if c <= sequence and c * tp1 <= sequence: # tp1 and tp2 can be used for seq
+            yield c
+
 def nv_candidates(tp1, tp2, nvs):
     # use partial nv domains for tp1 and tp2
     tp = tp1 * tp2
