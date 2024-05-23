@@ -64,9 +64,9 @@ def parse_args():
     parser = argparse.ArgumentParser()
     
     parser.add_argument("--global_batch_size", default=4096, type=int, help="gobal batch size")#4096
-    parser.add_argument("--config_type", default='A100', type=str, help="the gpu type")
+    parser.add_argument("--config_type", default='Bnext-CO', type=str, help="the gpu type")
     parser.add_argument("--ngpus_index", default=14, type=int, help="the max number of gpus for the system as a power of 2")
-    parser.add_argument("--nv_index", default=7, type=float, help="the max number of gpus for NVLink domain as a power of 2")
+    parser.add_argument("--nv_index", default=2, type=float, help="the max number of gpus for NVLink domain as a power of 2")
     parser.add_argument("--LLM_model", default='gpt3_1T', type=str, help="LLM model")
     parser.add_argument("--f_multiple", default=4, type=int, help="f = multiple * e for the LLM")
     parser.add_argument("--parallel_option", default='1d', type=str, help="tensor parallelization strategy")
