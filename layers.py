@@ -67,9 +67,9 @@ class Linear(Estimates):
 
         # sync/comm layers
         comm_fwd = (b * l * f) * element_size if m2 > 1 else 0
-        comm_fwd_type = 'reducescatter' if m2>1 else 'none'
-        comm_fwd_size = m2 if m2>=1 else 0
-        comm_fwd_topology = t2 if t2>=1 else 0
+        comm_fwd_type = 'reducescatter'
+        comm_fwd_size = m2
+        comm_fwd_topology = t2
 
         ####### backward pass #######
         xgrad_flops = b * l * e_local * (f_local * flops_per_mult + (f_local - 1) * flops_per_add)
@@ -88,9 +88,9 @@ class Linear(Estimates):
 
         # sync/comm layers
         comm_bwd = (b * l * e) * element_size if m1 > 1 else 0
-        comm_bwd_type = 'reducescatter' if m1>1 else 'none'
-        comm_bwd_size = m1 if m1>=1 else 0
-        comm_bwd_topology = t1 if t1>=1 else 0
+        comm_bwd_type = 'reducescatter'
+        comm_bwd_size = m1
+        comm_bwd_topology = t1
 
         self.set_stats(name,
                        flops_fwd = flops_fwd,
@@ -180,9 +180,9 @@ class LinearSeqp(Estimates):
 
         # sync/comm layers: no comms for seq
         comm_fwd = (b * l * f) * element_size if m2 > 1 else 0
-        comm_fwd_type = 'reducescatter' if m2 >1 else 0
-        comm_fwd_size = m2 if m2 >1 else 0
-        comm_fwd_topology = t2 if t2>1 else 0
+        comm_fwd_type = 'reducescatter'
+        comm_fwd_size = m2
+        comm_fwd_topology = t2
 
         ####### backward pass #######
         xgrad_flops = b * l_local * e_local * (f_local * flops_per_mult + (f_local - 1) * flops_per_add)
@@ -199,9 +199,9 @@ class LinearSeqp(Estimates):
 
         # sync/comm layers
         comm_bwd = (b * l * e) * element_size if m1 > 1 else 0
-        comm_bwd_type = 'reducescatter' if m1>1 else 0
-        comm_bwd_size = m1 if m1>=1 else 0
-        comm_bwd_topology = t1 if t1>=1 else 0
+        comm_bwd_type = 'reducescatter'
+        comm_bwd_size = m1
+        comm_bwd_topology = t1
 
         self.set_stats(name,
                        flops_fwd = flops_fwd,
@@ -366,16 +366,22 @@ class LinearSumma(Estimates):
         t = t_compute + t_comm
         if verbose:
             print(t_compute, t_comp, t_mem, flops, mem, t_comm, t_for_one_comm_set, t_for_one_comm_set * self.n_b)
-        return t, t_comm, t_comp, t_mem, intensity
+        return t, t_comm, intensity
 
     def compute_time(self): # need to overwrite to implement pipelined/overlapping comms
         # forward time
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
-        self.compute_time_summa(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size,
-                                                self.comm_fwd_type, self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
-        self.compute_time_summa(self.flops_bwd, self.mem_bwd, self.comm_bwd,
-                                    self.comm_bwd_size, self.comm_bwd_type, self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_time_summa(self.flops_fwd,
+                                                                                                             self.mem_fwd,
+                                                                                                             self.comm_fwd,
+                                                                                                             self.comm_fwd_size,
+                                                                                                             self.comm_fwd_type,
+                                                                                                             self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_time_summa(self.flops_bwd,
+                                                                                                             self.mem_bwd,
+                                                                                                             self.comm_bwd,
+                                                                                                             self.comm_bwd_size,
+                                                                                                             self.comm_bwd_type,
+                                                                                                             self.comm_bwd_topology)
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 
@@ -435,10 +441,11 @@ class Bias(Estimates):
         mem_bwd = (b * l_local * f_local + 1 * f_local) * element_size
 
         # comms
-        comm_bwd = m2_parallel * (f_local) * element_size # allreduce bias
-        comm_bwd_type = "allreduce" if m2>1 else 0
-        comm_bwd_size = m2 if m2>=1 else 0
-        comm_bwd_topology = t2 if t2>=1 else 0
+        # these comms will get overlapped I think
+#        comm_bwd = m2_parallel * (f_local) * element_size # allreduce bias
+#        comm_bwd_type = "allreduce"
+#        comm_bwd_size = m2
+#        comm_bwd_topology = t2
 
         self.set_stats(name,
                        flops_fwd = flops_fwd,
@@ -448,11 +455,11 @@ class Bias(Estimates):
                        weights_mem = weights_mem,
                        weights_grad_mem = weights_grad_mem,
                        flops_bwd = flops_bwd,
-                       mem_bwd = mem_bwd,
-                       comm_bwd = comm_bwd, 
-                       comm_bwd_type = comm_bwd_type,
-                       comm_bwd_size = comm_bwd_size,
-                       comm_bwd_topology = comm_bwd_topology)
+                       mem_bwd = mem_bwd)
+#                       comm_bwd = comm_bwd, 
+#                       comm_bwd_type = comm_bwd_type,
+#                       comm_bwd_size = comm_bwd_size,
+#                       comm_bwd_topology = comm_bwd_topology)
 
     def get_stats(self):
         self.compute_time()
@@ -674,9 +681,9 @@ class Softmax2D(Estimates):
 
         # sync/comm layers
         comm_fwd = m1_parallel * (b * h * l_local_1) * element_size
-        comm_fwd_type = 'allreduce' if m1>1 else 0
-        comm_fwd_size = m1 if m1>=1 else 0
-        comm_fwd_topology = t1 if t1>=1 else 0
+        comm_fwd_type = 'allreduce'
+        comm_fwd_size = m1
+        comm_fwd_topology = t1
         
         ####### backward pass #######
         flops_bwd =  (2 * b * h * l_local_1 * l_local_2) * flops_per_mult +  (b * h * l_local_1 * (l_local_2 - 1)) * flops_per_add + (b * h  * l_local_1 * l_local_2) * flops_per_add
@@ -685,9 +692,9 @@ class Softmax2D(Estimates):
 
         # sync/comm layers
         comm_bwd = m1_parallel * (b * h * l_local_1) * element_size
-        comm_bwd_type = 'allreduce' if m1>1 else 0
-        comm_bwd_size = m1 if m1>1 else 0
-        comm_bwd_topology = t1 if t1>1 else 0
+        comm_bwd_type = 'allreduce'
+        comm_bwd_size = m1
+        comm_bwd_topology = t1
 
         self.set_stats(name,
                        flops_fwd = flops_fwd,
@@ -778,9 +785,9 @@ class LayerNorm(Estimates):
 
         # sync/comm layers
         comm_fwd = (b * l * e) * element_size if m > 1 else 0
-        comm_fwd_type = 'allgather' if m>1 else 0
-        comm_fwd_size = m if m>=1 else 0
-        comm_fwd_topology = t if t>=1 else 0
+        comm_fwd_type = 'allgather'
+        comm_fwd_size = m
+        comm_fwd_topology = t
 
         ####### backward pass #######
         # little rough calcs, pretty sure some constant factor is off..
@@ -792,9 +799,9 @@ class LayerNorm(Estimates):
 
         # sync/comm layers
         comm_bwd = (b * l * e) * element_size if m > 1 else 0
-        comm_bwd_type = 'reducescatter' if m>1 else 0
-        comm_bwd_size = m if m>=1 else 0
-        comm_bwd_topology = t if t>=1 else 0
+        comm_bwd_type = 'reducescatter'
+        comm_bwd_size = m
+        comm_bwd_topology = t
 
         self.set_stats(name,
                        flops_fwd = flops_fwd,
@@ -887,9 +894,9 @@ class LayerNorm2D(Estimates):
 
         # sync/comm layers
         comm_fwd = m1_parallel * (2 * b * l_local) * element_size
-        comm_fwd_type = 'allreduce' if m1>1 else 'none'
-        comm_fwd_size = m1 if m1>=1 else 0
-        comm_fwd_topology = t1 if t1>=1 else 0
+        comm_fwd_type = 'allreduce'
+        comm_fwd_size = m1
+        comm_fwd_topology = t1
 
         ####### backward pass #######
         # little rough calcs, pretty sure some constant factor is off..
@@ -901,9 +908,9 @@ class LayerNorm2D(Estimates):
 
         # sync/comm layers
         comm_bwd = m1_parallel * (2 * e // m1 + 2 * b * l // m2) * element_size
-        comm_bwd_type = 'allreduce' if m1>1 else 'none'
-        comm_bwd_size = m1 if m1>=1 else 0 
-        comm_bwd_topology = t1 if t1>=1 else 0
+        comm_bwd_type = 'allreduce'
+        comm_bwd_size = m1
+        comm_bwd_topology = t1
 
         self.set_stats(name,
                        flops_fwd = flops_fwd,
@@ -1191,16 +1198,22 @@ class LogitsSumma(Estimates):
         t = t_compute + t_comm
         if verbose:
             print(t_compute, t_comp, t_mem, flops, mem, t_comm, t_for_one_comm_set, t_for_one_comm_set * self.n_b)
-        return t, t_comm, t_comp, t_mem, intensity
+        return t, t_comm, intensity
 
     def compute_time(self): # need to overwrite to implement pipelined/overlapping comms
         # forward time
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], 
-        self.stats['intensity_fwd'] = self.compute_time_summa(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size,
-                                    self.comm_fwd_type, self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'],  self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], 
-        self.stats['intensity_bwd'] = self.compute_time_summa(self.flops_bwd, self.mem_bwd, self.comm_bwd, self.comm_bwd_size,
-                                    self.comm_bwd_type, self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_time_summa(self.flops_fwd,
+                                                                                                             self.mem_fwd,
+                                                                                                             self.comm_fwd,
+                                                                                                             self.comm_fwd_size,
+                                                                                                             self.comm_fwd_type,
+                                                                                                             self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_time_summa(self.flops_bwd,
+                                                                                                             self.mem_bwd,
+                                                                                                             self.comm_bwd,
+                                                                                                             self.comm_bwd_size,
+                                                                                                             self.comm_bwd_type,
+                                                                                                             self.comm_bwd_topology)
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 
@@ -1333,16 +1346,22 @@ class AttendSumma(Estimates):
         t = t_compute + t_comm
         if verbose:
             print(t_compute, t_comp, t_mem, flops, mem, t_comm, t_for_one_comm_set, t_for_one_comm_set * self.n_b)
-        return t, t_comm, t_comp, t_mem, intensity
+        return t, t_comm, intensity
 
     def compute_time(self): # need to overwrite to implement pipelined/overlapping comms
         # forward time
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], 
-        self.stats['intensity_fwd'] = self.compute_time_summa(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size,
-                                    self.comm_fwd_type, self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], 
-        self.stats['intensity_bwd'] = self.compute_time_summa(self.flops_bwd, self.mem_bwd, self.comm_bwd, self.comm_bwd_size,
-                                    self.comm_bwd_type, self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_time_summa(self.flops_fwd,
+                                                                                                             self.mem_fwd,
+                                                                                                             self.comm_fwd,
+                                                                                                             self.comm_fwd_size,
+                                                                                                             self.comm_fwd_type,
+                                                                                                             self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_time_summa(self.flops_bwd,
+                                                                                                             self.mem_bwd,
+                                                                                                             self.comm_bwd,
+                                                                                                             self.comm_bwd_size,
+                                                                                                             self.comm_bwd_type,
+                                                                                                             self.comm_bwd_topology)
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 
@@ -1455,16 +1474,22 @@ class LogitsSeqp(Estimates):
             t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
 
         t = t_compute + t_comm
-        return t, t_comm, t_comp, t_mem, intensity
+        return t, t_comm, intensity
 
     def compute_time(self): # overwrite due to diff comm patterns
         # forward time
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], 
-        self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size,
-                                    self.comm_fwd_type, self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], 
-        self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd, self.mem_bwd, self.comm_bwd, self.comm_bwd_size,
-                                    self.comm_bwd_type, self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd,
+                                                                                                             self.mem_fwd,
+                                                                                                             self.comm_fwd,
+                                                                                                             self.comm_fwd_size,
+                                                                                                             self.comm_fwd_type,
+                                                                                                             self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd,
+                                                                                                             self.mem_bwd,
+                                                                                                             self.comm_bwd,
+                                                                                                             self.comm_bwd_size,
+                                                                                                             self.comm_bwd_type,
+                                                                                                             self.comm_bwd_topology)
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 
@@ -1578,16 +1603,22 @@ class AttendSeqp(Estimates):
             t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
 
         t = t_compute + t_comm
-        return t, t_comm, t_comp, t_mem, intensity
+        return t, t_comm, intensity
 
     def compute_time(self): # overwrite due to diff comm patterns
         # forward time
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], 
-        self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd,  self.mem_fwd, self.comm_fwd, self.comm_fwd_size,
-                                      self.comm_fwd_type, self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], 
-        self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd, self.mem_bwd, self.comm_bwd, self.comm_bwd_size,
-                                    self.comm_bwd_type, self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd,
+                                                                                                             self.mem_fwd,
+                                                                                                             self.comm_fwd,
+                                                                                                             self.comm_fwd_size,
+                                                                                                             self.comm_fwd_type,
+                                                                                                             self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd,
+                                                                                                             self.mem_bwd,
+                                                                                                             self.comm_bwd,
+                                                                                                             self.comm_bwd_size,
+                                                                                                             self.comm_bwd_type,
+                                                                                                             self.comm_bwd_topology)
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 
@@ -1812,9 +1843,9 @@ class FusedLASeqp(Estimates):
 
         # sync/comm layers
         comm_fwd = m2_parallel * (2 * b * h_local * l * q) * element_size # allgather KV
-        comm_fwd_type = "allgather" if m2>1 else 0
-        comm_fwd_size = m2 if m2>=1 else 0
-        comm_fwd_topology = t2 if t2>=1 else 0
+        comm_fwd_type = "allgather"
+        comm_fwd_size = m2
+        comm_fwd_topology = t2
 
         ####### backward pass #######
         ####### backward pass #######
@@ -1891,16 +1922,22 @@ class FusedLASeqp(Estimates):
             t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
 
         t = t_compute + t_comm
-        return t, t_comm, t_comp, t_mem, intensity
+        return t, t_comm, intensity
 
     def compute_time(self): # overwrite due to diff comm patterns
         # forward time
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
-        self.compute_times(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size,
-                                     self.comm_fwd_type, self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
-        self.compute_times(self.flops_bwd, self.mem_bwd, self.comm_bwd, self.comm_bwd_size,
-                                    self.comm_bwd_type, self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd,
+                                                                                                             self.mem_fwd,
+                                                                                                             self.comm_fwd,
+                                                                                                             self.comm_fwd_size,
+                                                                                                             self.comm_fwd_type,
+                                                                                                             self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd,
+                                                                                                             self.mem_bwd,
+                                                                                                             self.comm_bwd,
+                                                                                                             self.comm_bwd_size,
+                                                                                                             self.comm_bwd_type,
+                                                                                                             self.comm_bwd_topology)
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 
