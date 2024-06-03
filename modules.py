@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from layers import *
 
-def mlp_1d(b, l, e, f, parallelism={'m': 1}, topology={'t': 'nvlink'}, system=None):
+def mlp_1d(b, l, e, f, parallelism={'m': 1}, topology={'t': 1}, system=None):
     """
     MLP layer estimates
     parameters: b: batch size
@@ -53,10 +53,10 @@ def mlp_1d(b, l, e, f, parallelism={'m': 1}, topology={'t': 'nvlink'}, system=No
     t = topology['t']
 
     ######################################################################################################################################################
-    fc1 = Linear('fc1', b, l, e, f, parallelism={'dim1': 1, 'dim2': m}, topology={'t1': 'none', 't2': t}, system=system)
+    fc1 = Linear('fc1', b, l, e, f, parallelism={'dim1': 1, 'dim2': m}, topology={'t1': 1, 't2': t}, system=system)
     summary.append(fc1.get_stats())
     ######################################################################################################################################################
-    fc1_bias = Bias('fc1-bias', b, l, f, parallelism={'dim1': 1, 'dim2': m}, topology={'t1': 'none', 't2': t}, system=system)
+    fc1_bias = Bias('fc1-bias', b, l, f, parallelism={'dim1': 1, 'dim2': m}, topology={'t1': 1, 't2': t}, system=system)
     summary.append(fc1_bias.get_stats())
     ######################################################################################################################################################
     act1 = Act('act1', b * l * (f // m), system=system)
@@ -65,10 +65,10 @@ def mlp_1d(b, l, e, f, parallelism={'m': 1}, topology={'t': 'nvlink'}, system=No
     dpr1 = DropOut('dpr1', b * l * (f // m), system=system)
     summary.append(dpr1.get_stats())
     ######################################################################################################################################################
-    fc2 = Linear('fc2', b, l, f, e, parallelism={'dim1': m, 'dim2': 1}, topology={'t1': t, 't2': 'none'}, system=system)
+    fc2 = Linear('fc2', b, l, f, e, parallelism={'dim1': m, 'dim2': 1}, topology={'t1': t, 't2': 1}, system=system)
     summary.append(fc2.get_stats())
     ######################################################################################################################################################
-    fc2_bias = Bias('fc2-bias', b, l, e, parallelism={'dim1': 1, 'dim2': 1}, topology={'t1': 'none', 't2': 'none'}, system=system)
+    fc2_bias = Bias('fc2-bias', b, l, e, parallelism={'dim1': 1, 'dim2': 1}, topology={'t1': 1, 't2': 1}, system=system)
     summary.append(fc2_bias.get_stats())
     ######################################################################################################################################################
     dpr2 = DropOut('dpr2', b * (l // m) * e, system=system)
@@ -80,7 +80,7 @@ def mlp_1d(b, l, e, f, parallelism={'m': 1}, topology={'t': 'nvlink'}, system=No
 
     return pd.DataFrame(summary)
 
-def mlp_2d(b, l, e, f, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 't2': 'none'}, system=None):
+def mlp_2d(b, l, e, f, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 1, 't2': 1}, system=None):
     """
     MLP layer estimates
     parameters: b: batch size
@@ -160,7 +160,7 @@ def mlp_2d(b, l, e, f, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', '
 
     return pd.DataFrame(summary)
 
-def mlp_seqp(b, l, e, f, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 't2': 'none'}, system=None):
+def mlp_seqp(b, l, e, f, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 1, 't2': 1}, system=None):
     """
     MLP layer estimates
     parameters: b: batch size
@@ -240,7 +240,7 @@ def mlp_seqp(b, l, e, f, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none',
 
     return pd.DataFrame(summary)
 
-def sa_1d(b, l, e, h, parallelism={'m': 1}, topology={'t': 'nvlink'}, flash_attention=False, attention_recompute=False, system=None):
+def sa_1d(b, l, e, h, parallelism={'m': 1}, topology={'t': 1}, flash_attention=False, attention_recompute=False, system=None):
     """
     parameters: b: batch size
                 l: seq length
@@ -304,7 +304,7 @@ def sa_1d(b, l, e, h, parallelism={'m': 1}, topology={'t': 'nvlink'}, flash_atte
     t = topology['t']
 
     ######################################################################################################################################################
-    qkv = Linear('qkv', b, l, e, (3 * e), parallelism={'dim1': 1, 'dim2': m}, topology={'t1': 'none', 't2': t}, system=system)
+    qkv = Linear('qkv', b, l, e, (3 * e), parallelism={'dim1': 1, 'dim2': m}, topology={'t1': 1, 't2': t}, system=system)
     summary.append(qkv.get_stats())
     if flash_attention:
         ######################################################################################################################################################
@@ -328,10 +328,10 @@ def sa_1d(b, l, e, h, parallelism={'m': 1}, topology={'t': 'nvlink'}, flash_atte
         attend = Attend('attend', b, l, (e // h), h, parallelism={'dim1': m}, topology={'t1': t}, remat=attention_recompute,  system=system)
         summary.append(attend.get_stats())
         ######################################################################################################################################################
-    vproj = Linear('vproj', b, l, e, e, parallelism={'dim1': m, 'dim2': 1}, topology={'t1': t, 't2': 'none'},  system=system)
+    vproj = Linear('vproj', b, l, e, e, parallelism={'dim1': m, 'dim2': 1}, topology={'t1': t, 't2': 1},  system=system)
     summary.append(vproj.get_stats())
     ######################################################################################################################################################
-    vproj_bias = Bias('vproj-bias', b, l, e, parallelism={'dim1': 1, 'dim2': 1}, topology={'t1': 'none', 't2': 'none'},  system=system)
+    vproj_bias = Bias('vproj-bias', b, l, e, parallelism={'dim1': 1, 'dim2': 1}, topology={'t1': 1, 't2': 1},  system=system)
     summary.append(vproj_bias.get_stats())
     ######################################################################################################################################################
     dpr_v = DropOut('dpr_v', b * (l // m) * e,  system=system)
@@ -343,7 +343,7 @@ def sa_1d(b, l, e, h, parallelism={'m': 1}, topology={'t': 'nvlink'}, flash_atte
 
     return pd.DataFrame(summary)
 
-def sa_2d(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 't2': 'none'}, system=None):
+def sa_2d(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 1, 't2': 1}, system=None):
     """
     parameters: b: batch size
                 l: seq length
@@ -434,7 +434,7 @@ def sa_2d(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 't
 
     return pd.DataFrame(summary)
 
-def sa_2d_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 't2': 'none'}, flash_attention=True, system=None):
+def sa_2d_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 1, 't2': 1}, flash_attention=True, system=None):
     """
     parameters: b: batch size
                 l: seq length
@@ -532,7 +532,7 @@ def sa_2d_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none
 
     return pd.DataFrame(summary)
 
-def sa_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 't2': 'none'}, flash_attention=True, system=None):
+def sa_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 1, 't2': 1}, flash_attention=True, system=None):
     """
     parameters: b: batch size
                 l: seq length
@@ -593,7 +593,7 @@ def sa_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 
     t2 = topology['t2']
 
     ######################################################################################################################################################
-    qkv = LinearSeqp('qkv', b, l, e, (3 * e), parallelism={'dim1': 1, 'dim2': m1, 'dimseq': m2}, topology={'t1': 'none', 't2': t1, 'tseq': t2}, system=system)
+    qkv = LinearSeqp('qkv', b, l, e, (3 * e), parallelism={'dim1': 1, 'dim2': m1, 'dimseq': m2}, topology={'t1': 1, 't2': t1, 'tseq': t2}, system=system)
     summary.append(qkv.get_stats())
     ######################################################################################################################################################
     if flash_attention:
@@ -615,7 +615,7 @@ def sa_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 'none', 
         attend = AttendSeqp('attend', b, l, (e // h), h, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
         summary.append(attend.get_stats())
         ######################################################################################################################################################
-    vproj = LinearSeqp('vproj', b, l, e, e, parallelism={'dim1': m1, 'dim2': 1, 'dimseq': m2}, topology={'t1': t1, 't2': 'none', 'tseq': t2}, system=system)
+    vproj = LinearSeqp('vproj', b, l, e, e, parallelism={'dim1': m1, 'dim2': 1, 'dimseq': m2}, topology={'t1': t1, 't2': 1, 'tseq': t2}, system=system)
     summary.append(vproj.get_stats())
     ######################################################################################################################################################
     vproj_bias = Bias('vproj-bias', b, l, e, parallelism={'dim1': m2, 'dim2': m1}, topology={'t1': t2, 't2': t1}, system=system)
