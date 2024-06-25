@@ -73,15 +73,15 @@ class Estimates():
         t_mem = self.get_time_mem(mem)
         intensity = t_comp / t_mem
         t_comm = self.get_time_comm(comm, comm_size, comm_type, comm_topology)  
-        return max(t_comp, t_mem) + t_comm, t_comm, intensity
+        return max(t_comp, t_mem) + t_comm, t_comm, t_comp, t_mem, intensity
 
     def compute_time(self):
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.get_time(self.flops_fwd, self.mem_fwd, 
-                                                                                     self.comm_fwd, self.comm_fwd_size,
-                                                                                     self.comm_fwd_type, self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.get_time(self.flops_bwd, self.mem_bwd, 
-                                                                                     self.comm_bwd, self.comm_bwd_size,
-                                                                                     self.comm_bwd_type, self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
+                self.get_time(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size, self.comm_fwd_type, self.comm_fwd_topology)
+
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
+                 self.get_time(self.flops_bwd, self.mem_bwd, self.comm_bwd, self.comm_bwd_size, self.comm_bwd_type, self.comm_bwd_topology)
+
         if self.recompute:
             self.stats['t_bwd'] += self.stats['t_fwd']
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
@@ -119,6 +119,7 @@ class Estimates():
         ef = system['nvlink_eff']
         bs = system['ib_bandwidth'] * es
         bf = system['nvlink_bandwidth'] * (topology - 1) * ef
+        nic_factor = system['nic_factor'] # number of nics per GPU (can be 0.5 etc)
         assert topology <= nvs, 'you have provisioned more gpus than nvlink domain size for fast comm'
 
         # define some pre-factors assuming bus bw from nccl perf docs
@@ -127,24 +128,19 @@ class Estimates():
         # ring correction 
         correction = (n_gpus - 1) / n_gpus
 
-        # root to all procs comms
-        if comm_type in ['reduce', 'broadcast']:
-            if topology == 1: # all ib
-                t_comm = vol / bs
-            elif nodes == 1:
-                t_comm = vol / bf # has nvlink and only one node
-            else:
-                t_comm = max(vol / (topology * bs), vol / bf)
+        if topology == 1: # all ib
+            t_comm = vol / bs
+        elif nodes == 1:
+            t_comm = vol / bf # has nvlink and only one node
         else:
-            # time is max(fast domain time, slow domain time)
-            ts = vol / (topology *  bs)
-            tf = vol / bf if bf != 0 else 0 # bf is zero if only 1 gpu in fast domain (which is no fast domain)
-            t_comm = correction * max(ts, tf) # will provision rings based on number of gpus per node
+            t_comm = max(vol / (nic_factor * topology * bs), vol / bf)
 
-            if comm_type == 'allreduce':
-                t_comm *= 2
+        # ring corrections
+        if comm_type not in ['reduce', 'broadcast']:
+            t_comm *= correction
 
-
+        if comm_type == 'allreduce':
+            t_comm *= 2
 
         return t_comm
 

@@ -366,22 +366,16 @@ class LinearSumma(Estimates):
         t = t_compute + t_comm
         if verbose:
             print(t_compute, t_comp, t_mem, flops, mem, t_comm, t_for_one_comm_set, t_for_one_comm_set * self.n_b)
-        return t, t_comm, intensity
+        return t, t_comm, t_comp, t_mem, intensity
 
     def compute_time(self): # need to overwrite to implement pipelined/overlapping comms
         # forward time
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_time_summa(self.flops_fwd,
-                                                                                                             self.mem_fwd,
-                                                                                                             self.comm_fwd,
-                                                                                                             self.comm_fwd_size,
-                                                                                                             self.comm_fwd_type,
-                                                                                                             self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_time_summa(self.flops_bwd,
-                                                                                                             self.mem_bwd,
-                                                                                                             self.comm_bwd,
-                                                                                                             self.comm_bwd_size,
-                                                                                                             self.comm_bwd_type,
-                                                                                                             self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
+                                                self.compute_time_summa(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size,
+                                                                        self.comm_fwd_type, self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
+                                                self.compute_time_summa(self.flops_bwd, self.mem_bwd, self.comm_bwd,
+                                                                        self.comm_bwd_size, self.comm_bwd_type, self.comm_bwd_topology)
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 
@@ -1198,22 +1192,16 @@ class LogitsSumma(Estimates):
         t = t_compute + t_comm
         if verbose:
             print(t_compute, t_comp, t_mem, flops, mem, t_comm, t_for_one_comm_set, t_for_one_comm_set * self.n_b)
-        return t, t_comm, intensity
+        return t, t_comm, t_comp, t_mem, intensity
 
     def compute_time(self): # need to overwrite to implement pipelined/overlapping comms
         # forward time
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_time_summa(self.flops_fwd,
-                                                                                                             self.mem_fwd,
-                                                                                                             self.comm_fwd,
-                                                                                                             self.comm_fwd_size,
-                                                                                                             self.comm_fwd_type,
-                                                                                                             self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_time_summa(self.flops_bwd,
-                                                                                                             self.mem_bwd,
-                                                                                                             self.comm_bwd,
-                                                                                                             self.comm_bwd_size,
-                                                                                                             self.comm_bwd_type,
-                                                                                                             self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
+                                                self.compute_time_summa(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size,
+                                                                        self.comm_fwd_type, self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
+                                                self.compute_time_summa(self.flops_bwd, self.mem_bwd, self.comm_bwd,
+                                                                        self.comm_bwd_size, self.comm_bwd_type, self.comm_bwd_topology)
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 
@@ -1346,22 +1334,16 @@ class AttendSumma(Estimates):
         t = t_compute + t_comm
         if verbose:
             print(t_compute, t_comp, t_mem, flops, mem, t_comm, t_for_one_comm_set, t_for_one_comm_set * self.n_b)
-        return t, t_comm, intensity
+        return t, t_comm, t_comp, t_mem, intensity
 
     def compute_time(self): # need to overwrite to implement pipelined/overlapping comms
         # forward time
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_time_summa(self.flops_fwd,
-                                                                                                             self.mem_fwd,
-                                                                                                             self.comm_fwd,
-                                                                                                             self.comm_fwd_size,
-                                                                                                             self.comm_fwd_type,
-                                                                                                             self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_time_summa(self.flops_bwd,
-                                                                                                             self.mem_bwd,
-                                                                                                             self.comm_bwd,
-                                                                                                             self.comm_bwd_size,
-                                                                                                             self.comm_bwd_type,
-                                                                                                             self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
+                                                self.compute_time_summa(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size,
+                                                                        self.comm_fwd_type, self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
+                                                self.compute_time_summa(self.flops_bwd, self.mem_bwd, self.comm_bwd,
+                                                                        self.comm_bwd_size, self.comm_bwd_type, self.comm_bwd_topology)
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 
@@ -1474,22 +1456,17 @@ class LogitsSeqp(Estimates):
             t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
 
         t = t_compute + t_comm
-        return t, t_comm, intensity
+        return t, t_comm, t_comp, t_mem, intensity
 
     def compute_time(self): # overwrite due to diff comm patterns
         # forward time
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd,
-                                                                                                             self.mem_fwd,
-                                                                                                             self.comm_fwd,
-                                                                                                             self.comm_fwd_size,
-                                                                                                             self.comm_fwd_type,
-                                                                                                             self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd,
-                                                                                                             self.mem_bwd,
-                                                                                                             self.comm_bwd,
-                                                                                                             self.comm_bwd_size,
-                                                                                                             self.comm_bwd_type,
-                                                                                                             self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
+                                                self.compute_times(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size,
+                                                                        self.comm_fwd_type, self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
+                                                self.compute_times(self.flops_bwd, self.mem_bwd, self.comm_bwd,
+                                                                        self.comm_bwd_size, self.comm_bwd_type, self.comm_bwd_topology)
+        self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 
@@ -1603,22 +1580,16 @@ class AttendSeqp(Estimates):
             t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
 
         t = t_compute + t_comm
-        return t, t_comm, intensity
+        return t, t_comm, t_comp, t_mem, intensity
 
     def compute_time(self): # overwrite due to diff comm patterns
         # forward time
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd,
-                                                                                                             self.mem_fwd,
-                                                                                                             self.comm_fwd,
-                                                                                                             self.comm_fwd_size,
-                                                                                                             self.comm_fwd_type,
-                                                                                                             self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd,
-                                                                                                             self.mem_bwd,
-                                                                                                             self.comm_bwd,
-                                                                                                             self.comm_bwd_size,
-                                                                                                             self.comm_bwd_type,
-                                                                                                             self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
+                                                self.compute_times(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size,
+                                                                        self.comm_fwd_type, self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
+                                                self.compute_times(self.flops_bwd, self.mem_bwd, self.comm_bwd,
+                                                                        self.comm_bwd_size, self.comm_bwd_type, self.comm_bwd_topology)
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 
@@ -1922,22 +1893,16 @@ class FusedLASeqp(Estimates):
             t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
 
         t = t_compute + t_comm
-        return t, t_comm, intensity
+        return t, t_comm, t_comp, t_mem, intensity
 
     def compute_time(self): # overwrite due to diff comm patterns
         # forward time
-        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['intensity_fwd'] = self.compute_times(self.flops_fwd,
-                                                                                                             self.mem_fwd,
-                                                                                                             self.comm_fwd,
-                                                                                                             self.comm_fwd_size,
-                                                                                                             self.comm_fwd_type,
-                                                                                                             self.comm_fwd_topology)
-        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['intensity_bwd'] = self.compute_times(self.flops_bwd,
-                                                                                                             self.mem_bwd,
-                                                                                                             self.comm_bwd,
-                                                                                                             self.comm_bwd_size,
-                                                                                                             self.comm_bwd_type,
-                                                                                                             self.comm_bwd_topology)
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
+                                                self.compute_times(self.flops_fwd, self.mem_fwd, self.comm_fwd, self.comm_fwd_size,
+                                                                        self.comm_fwd_type, self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
+                                                self.compute_times(self.flops_bwd, self.mem_bwd, self.comm_bwd,
+                                                                        self.comm_bwd_size, self.comm_bwd_type, self.comm_bwd_topology)
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 
 
