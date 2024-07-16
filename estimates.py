@@ -73,7 +73,8 @@ class Estimates():
         t_mem = self.get_time_mem(mem)
         intensity = t_comp / t_mem
         t_comm = self.get_time_comm(comm, comm_size, comm_type, comm_topology)  
-        return max(t_comp, t_mem) + t_comm, t_comm, t_comp, t_mem, intensity
+        t_mem_exposed = max(t_mem - t_comp, 0)
+        return max(t_comp, t_mem) + t_comm, t_comm, t_comp, t_mem_exposed, intensity
 
     def compute_time(self):
         self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
@@ -90,7 +91,7 @@ class Estimates():
     def get_time_flops(self, flops):
         ''' time to execute flops '''
         hardware_flops = self.system['matrix_flops_fp16'] if self.use_tensor_cores else self.system['vector_flops_fp16']
-        t_flops = flops / hardware_flops
+        t_flops = 20 * 1E-6 + flops / hardware_flops
         return t_flops
 
     def get_time_mem(self, mem):
@@ -118,7 +119,8 @@ class Estimates():
         es = system['ib_eff']
         ef = system['nvlink_eff']
         bs = system['ib_bandwidth'] * es
-        bf = system['nvlink_bandwidth'] * (topology - 1) * ef
+        bf = system['nvlink_bandwidth'] * ef
+        #bf = system['nvlink_bandwidth'] * (topology - 1) * ef
         nic_factor = system['nic_factor'] # number of nics per GPU (can be 0.5 etc)
         assert topology <= nvs, 'you have provisioned more gpus than nvlink domain size for fast comm'
 
@@ -136,7 +138,7 @@ class Estimates():
             t_comm = max(vol / (nic_factor * topology * bs), vol / bf)
 
         # ring corrections
-        if comm_type not in ['reduce', 'broadcast']:
+        if comm_type not in ['reduce', 'broadcast', 'p2p']:
             t_comm *= correction
 
         if comm_type == 'allreduce':
