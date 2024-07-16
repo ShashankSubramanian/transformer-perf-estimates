@@ -10,7 +10,7 @@
 "ib_eff": 0.8,
 "ib_latency": 1e-05,
 "nvlink_size": 64, 
-"nic_factor": 0.5,
+"nic_factor": 1,
 "empirical": false, 
 "summa_nb": 4,
 "element_size": 2e-09, 
