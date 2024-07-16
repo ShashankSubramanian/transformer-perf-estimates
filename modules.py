@@ -629,3 +629,27 @@ def sa_seqp(b, l, e, h, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 1, 't2':
     ######################################################################################################################################################
 
     return pd.DataFrame(summary)
+
+def dataparallel(modules=[],
+       depth=1,
+       dp=1,
+       t_dp=1,
+       overlap=True,
+       system=None):
+    summary = []
+    dp_comms = DataParallel('dp_comms', modules=modules, depth=depth, dp=dp, t_dp=t_dp, overlap=overlap, system=system)
+    summary.append(dp_comms.get_stats())
+    return pd.DataFrame(summary)
+
+def pipelineparallel(modules=[],
+       number_micro_batches=1,
+       comm_vol=0,
+       pp=1,
+       t_pp=1,
+       overlap=False,
+       system=None):
+    summary = []
+    pp_comms = PipelineParallel('pp_comms', modules=modules, number_micro_batches=number_micro_batches, comm_vol=comm_vol, pp=pp, t_pp=t_pp, overlap=overlap, system=system)
+    summary.append(pp_comms.get_stats())
+    return pd.DataFrame(summary)
+
