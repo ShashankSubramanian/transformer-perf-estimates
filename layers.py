@@ -366,7 +366,8 @@ class LinearSumma(Estimates):
         t = t_compute + t_comm
         if verbose:
             print(t_compute, t_comp, t_mem, flops, mem, t_comm, t_for_one_comm_set, t_for_one_comm_set * self.n_b)
-        return t, t_comm, t_comp, t_mem, intensity
+        t_mem_exposed = max(t_mem - t_comp, 0)
+        return t, t_comm, t_comp, t_mem_exposed, intensity
 
     def compute_time(self): # need to overwrite to implement pipelined/overlapping comms
         # forward time
@@ -480,7 +481,9 @@ class Act(Estimates):
         element_size = self.element_size
 
         # total flops
-        flops_fwd = m * flops_per_mult
+        # https://github.com/google-research/electra/blob/master/flops_computation.py
+        # for erf, tanh, and other ops
+        flops_fwd = m * flops_per_mult * 8
         
         #total mem
         activation_in_mem = (m) * element_size
@@ -489,7 +492,7 @@ class Act(Estimates):
         mem_fwd = activation_in_mem + activation_out_mem
         
         ####### backward pass #######
-        flops_bwd =  m * flops_per_mult
+        flops_bwd =  m * flops_per_mult * 13
         activation_grad_mem = 2 * (m) * element_size
         mem_bwd = activation_grad_mem + activation_buffer
 
@@ -1192,7 +1195,8 @@ class LogitsSumma(Estimates):
         t = t_compute + t_comm
         if verbose:
             print(t_compute, t_comp, t_mem, flops, mem, t_comm, t_for_one_comm_set, t_for_one_comm_set * self.n_b)
-        return t, t_comm, t_comp, t_mem, intensity
+        t_mem_exposed = max(t_mem - t_comp, 0)
+        return t, t_comm, t_comp, t_mem_exposed, intensity
 
     def compute_time(self): # need to overwrite to implement pipelined/overlapping comms
         # forward time
@@ -1334,7 +1338,8 @@ class AttendSumma(Estimates):
         t = t_compute + t_comm
         if verbose:
             print(t_compute, t_comp, t_mem, flops, mem, t_comm, t_for_one_comm_set, t_for_one_comm_set * self.n_b)
-        return t, t_comm, t_comp, t_mem, intensity
+        t_mem_exposed = max(t_mem - t_comp, 0)
+        return t, t_comm, t_comp, t_mem_exposed, intensity
 
     def compute_time(self): # need to overwrite to implement pipelined/overlapping comms
         # forward time
@@ -1456,7 +1461,8 @@ class LogitsSeqp(Estimates):
             t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
 
         t = t_compute + t_comm
-        return t, t_comm, t_comp, t_mem, intensity
+        t_mem_exposed = max(t_mem - t_comp, 0)
+        return t, t_comm, t_comp, t_mem_exposed, intensity
 
     def compute_time(self): # overwrite due to diff comm patterns
         # forward time
@@ -1580,7 +1586,8 @@ class AttendSeqp(Estimates):
             t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
 
         t = t_compute + t_comm
-        return t, t_comm, t_comp, t_mem, intensity
+        t_mem_exposed = max(t_mem - t_comp, 0)
+        return t, t_comm, t_comp, t_mem_exposed, intensity
 
     def compute_time(self): # overwrite due to diff comm patterns
         # forward time
@@ -1893,7 +1900,8 @@ class FusedLASeqp(Estimates):
             t_comm = self.get_time_comm(comms, comm_sizes, comm_types, comm_tops)  
 
         t = t_compute + t_comm
-        return t, t_comm, t_comp, t_mem, intensity
+        t_mem_exposed = max(t_mem - t_comp, 0)
+        return t, t_comm, t_comp, t_mem_exposed, intensity
 
     def compute_time(self): # overwrite due to diff comm patterns
         # forward time
@@ -1902,6 +1910,210 @@ class FusedLASeqp(Estimates):
                                                                         self.comm_fwd_type, self.comm_fwd_topology)
         self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
                                                 self.compute_times(self.flops_bwd, self.mem_bwd, self.comm_bwd,
+                                                                        self.comm_bwd_size, self.comm_bwd_type, self.comm_bwd_topology)
+        self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
+
+
+    def get_stats(self):
+        self.compute_time()
+        return self.stats
+
+class DataParallel(Estimates):
+    def __init__(self, name,
+                 modules=[],
+                 depth=1,
+                 dp=1,
+                 t_dp=1,
+                 overlap=True,
+                 system=None):
+        """
+        data parallel comms that are overlapped with either
+        fwd or bwd passes of the adjacent layers.
+        no computations here
+        depth is the num of layers on this device
+        dp: total number of gpus in data parallel grp
+        t_dp: number of gpus in fast domain
+        """
+
+        super().__init__(system=system)
+
+        self.depth = depth
+        self.overlap = overlap
+        self.t_fwd = 0
+        self.t_bwd = 0
+        self.wts_mem = 0
+        for mod in modules:
+            self.t_fwd += mod['t_fwd'].sum() # 1 layer, 1 microbatch
+            self.t_bwd += mod['t_bwd'].sum()
+            self.wts_mem += mod['weights_mem'].sum() # wt mems of 1 layer
+
+        # weird var names.. ignore it for now
+        # reducescatter of wgrads are overlapped with bwd pass of last microbatch
+        comm_bwd = self.wts_mem
+        comm_bwd_type = 'reducescatter'
+        comm_bwd_size = dp
+        comm_bwd_topology = t_dp
+        
+        # allgather of w are overlapped with fwd pass of first microbatch
+        comm_fwd = self.wts_mem
+        comm_fwd_type = 'allgather'
+        comm_fwd_size = dp
+        comm_fwd_topology = t_dp
+
+        
+        self.set_stats(name,
+                       flops_fwd = 0,
+                       use_tensor_cores = False,
+                       mem_fwd = 0,
+                       activation_buffer = 0,
+                       weights_mem = 0,
+                       weights_grad_mem = 0,
+                       comm_fwd = comm_fwd, 
+                       comm_fwd_type = comm_fwd_type,
+                       comm_fwd_size = comm_fwd_size,
+                       comm_fwd_topology = comm_fwd_topology,
+                       flops_bwd = 0,
+                       mem_bwd = 0,
+                       comm_bwd = comm_bwd, 
+                       comm_bwd_type = comm_bwd_type,
+                       comm_bwd_size = comm_bwd_size,
+                       comm_bwd_topology = comm_bwd_topology)
+
+    def compute_times(self, t_compute_overlap, comm, comm_size, comm_type, comm_top):
+        t_comp = 0
+        t_mem = 0
+        intensity = 0
+
+        # time for collective (RS or AG)
+        t_comm = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+
+        nl = self.depth
+        # have to do one AG or RS. the rest are overlapped with compute
+        if self.overlap:
+            # test_var = max(t_comm - t_compute_overlap, 0) * (nl - 1)
+            # print("1 comm = {}, 1 compute = {}, test = {}".format(t_comm, t_compute_overlap, test_var))
+            t_comm += max(t_comm - t_compute_overlap, 0) * (nl - 1)
+        else:
+            t_comm *= nl # nl layers of RS/AG 
+
+        # only comm time for this layer
+        t = t_comm
+        t_mem_exposed = max(t_mem - t_comp, 0)
+        return t, t_comm, t_comp, t_mem_exposed, intensity
+
+    def compute_time(self): # overwrite due to diff comm patterns
+        # forward time
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
+                                                self.compute_times(self.t_fwd, self.comm_fwd, self.comm_fwd_size,
+                                                                        self.comm_fwd_type, self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
+                                                self.compute_times(self.t_bwd, self.comm_bwd,
+                                                                        self.comm_bwd_size, self.comm_bwd_type, self.comm_bwd_topology)
+        self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
+
+
+    def get_stats(self):
+        self.compute_time()
+        return self.stats
+
+class PipelineParallel(Estimates):
+    def __init__(self, name,
+                 modules=[],
+                 comm_vol=0,
+                 number_micro_batches=1,
+                 pp=1,
+                 t_pp=1,
+                 overlap=True,
+                 system=None):
+        """
+        pipline parallel comms
+        time for one P2P is overlapped with fwd/bwd of 
+        one microbatch. happens for all microbatches
+        """
+
+        super().__init__(system=system)
+
+        self.number_micro_batches = number_micro_batches
+        self.pp = pp
+        self.warmup = pp if self.number_micro_batches >= pp else self.number_micro_batches
+        self.overlap = overlap
+        self.t_fwd = 0
+        self.t_bwd = 0
+        self.comm_vol = comm_vol
+        for mod in modules:
+            self.t_fwd += mod['t_fwd'].sum() # 1 layer, 1 microbatch
+            self.t_bwd += mod['t_bwd'].sum()
+
+        comm_bwd = self.comm_vol
+        comm_bwd_type = 'p2p'
+        comm_bwd_size = t_pp
+        comm_bwd_topology = t_pp
+        
+        comm_fwd = self.comm_vol
+        comm_fwd_type = 'p2p'
+        comm_fwd_size = t_pp
+        comm_fwd_topology = t_pp
+
+        
+        self.set_stats(name,
+                       flops_fwd = 0,
+                       use_tensor_cores = False,
+                       mem_fwd = 0,
+                       activation_buffer = 0,
+                       weights_mem = 0,
+                       weights_grad_mem = 0,
+                       comm_fwd = comm_fwd, 
+                       comm_fwd_type = comm_fwd_type,
+                       comm_fwd_size = comm_fwd_size,
+                       comm_fwd_topology = comm_fwd_topology,
+                       flops_bwd = 0,
+                       mem_bwd = 0,
+                       comm_bwd = comm_bwd, 
+                       comm_bwd_type = comm_bwd_type,
+                       comm_bwd_size = comm_bwd_size,
+                       comm_bwd_topology = comm_bwd_topology)
+
+    def compute_times(self, t_compute_overlap, comm, comm_size, comm_type, comm_top):
+        t_comp = 0
+        t_mem = 0
+        intensity = 0
+
+        if self.pp == 1:
+            t_comm = 0
+        else:
+            # time for collective (P2P)
+            if comm_top > 1:
+                # some links are on the fast network
+                total_links = self.pp - 1
+                slow_links = int(self.pp / comm_top - 1)
+                fast_links = total_links - slow_links
+                t_comm_fast = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+                t_comm_slow = self.get_time_comm(comm, 1, comm_type, 1)  
+                t_comm = fast_links / total_links * t_comm_fast + slow_links / total_links * t_comm_slow
+            elif comm_top == 1:
+                t_comm = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+            else:
+                assert False, 'pipeline comm topology is incorrect'
+
+        if self.overlap:
+#            t_prologue = self.warmup * max(t_comm - t_compute_overlap, 0)
+#            t_comm += max(t_comm - t_compute_overlap, 0) * (nl - 1)
+            t_comm = 0
+        else:
+            t_comm *= self.number_micro_batches # p2p comm is called for every microbatch
+
+        # only comm time for this layer
+        t = t_comm
+        t_mem_exposed = max(t_mem - t_comp, 0)
+        return t, t_comm, t_comp, t_mem_exposed, intensity
+
+    def compute_time(self): # overwrite due to diff comm patterns
+        # forward time
+        self.stats['t_fwd'], self.stats['t_fwd_comm'], self.stats['t_fwd_comp'], self.stats['t_fwd_mem'], self.stats['intensity_fwd'] = \
+                                                self.compute_times(self.t_fwd, self.comm_fwd, self.comm_fwd_size,
+                                                                        self.comm_fwd_type, self.comm_fwd_topology)
+        self.stats['t_bwd'], self.stats['t_bwd_comm'], self.stats['t_bwd_comp'], self.stats['t_bwd_mem'], self.stats['intensity_bwd'] = \
+                                                self.compute_times(self.t_bwd, self.comm_bwd,
                                                                         self.comm_bwd_size, self.comm_bwd_type, self.comm_bwd_topology)
         self.stats['t'] = self.stats['t_fwd'] + self.stats['t_bwd']
 

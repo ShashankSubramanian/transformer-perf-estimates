@@ -41,6 +41,20 @@ def tpseqp_candidates_dim2(n, tp1, sequence):
         if c <= sequence and c * tp1 <= sequence: # tp1 and tp2 can be used for seq
             yield c
 
+def nv_candidates_1d(tp, dp, pp, nvs):
+    ''' candidates for fast domain '''
+    total = tp * dp * pp
+    if total <= nvs:
+        yield (tp, dp, pp) # all in nv domain
+    else:
+        for n1 in factors(nvs):
+            rem = nvs // n1
+            for n2 in factors(rem):
+                n3 = rem // n2
+                assert n1 * n2 * n3 == nvs, "nv size assert in 1d"
+                if tp % n1 == 0 and dp % n2 == 0 and pp % n3 == 0:
+                    yield (n1, n2, n3)
+
 def nv_candidates(tp1, tp2, nvs):
     # use partial nv domains for tp1 and tp2
     tp = tp1 * tp2
@@ -81,12 +95,33 @@ def summa_nb_candidates(tp1, tp2, embed):
     for c in nb_range:
             yield c
 
-def totals(df_mlp, df_sa, depth, pp=1, dp=1, number_micro_batches=1, verbose=False):
+def totals(df_mlp, df_sa, df_dp, df_pp, depth, pp=1, dp=1, number_micro_batches=1, verbose=False):
     # time
-    t = (df_mlp['t_fwd'].sum() + df_mlp['t_bwd'].sum() + df_sa['t_fwd'].sum() + df_sa['t_bwd'].sum()) * number_micro_batches # local_batch_size images
-    t *= depth // pp # (tf + tb) * m
+    t_fwd = (df_mlp['t_fwd'].sum() + df_sa['t_fwd'].sum()) # 1 micro batch, 1 layer
+    t_bwd = (df_mlp['t_bwd'].sum() + df_sa['t_bwd'].sum()) # 1 micro batch, 1 layer
+    t = (t_fwd + t_bwd) * number_micro_batches  # 1 local batch, 1 layer
+    t *= depth // pp # (tf + tb) * m for all local layers
+    # pp comms
+    t_pp_comm = df_pp['t'].sum()
+    t += t_pp_comm
+    # bubble time
     bubble_time = (pp - 1) * (t / number_micro_batches)  # but not ideal
+#    bubble_time /= (depth // pp)
     t += bubble_time # add this
+    # dp comms
+    t_dp_comm = df_dp['t'].sum()
+    t += t_dp_comm
+
+    # mem
+    wts_one_layer = (df_mlp['weights_mem'].sum() + df_sa['weights_mem'].sum())
+    wts = wts_one_layer * (depth // pp) # not a function of batch size
+    wts_grad = wts / dp
+    wts_optimizer_states = 6 * (wts / dp) # 2wts for fp32 copy of weights, mom, variance
+    acts = (df_mlp['activation_buffer'].sum() + df_sa['activation_buffer'].sum()) * (depth // pp) # store microbatch of acts
+    # assume 1F1B
+    mem_factor = pp if number_micro_batches >= pp else number_micro_batches
+    acts *= mem_factor # at most pp stages of acts need to be maintained for this so not multiplied by number of micro batches
+    mem = wts + wts_grad + wts_optimizer_states + acts
 
     # track other times
     # time comm
@@ -99,23 +134,22 @@ def totals(df_mlp, df_sa, depth, pp=1, dp=1, number_micro_batches=1, verbose=Fal
 
     if verbose:
         print('time for 1 itr = {}'.format(t))
-    # mem
-    wts = (df_mlp['weights_mem'].sum() + df_sa['weights_mem'].sum()) * (depth // pp) # not a function of batch size
-    wts_grad = wts / dp
-    wts_optimizer_states = 6 * (wts / dp) # 2wts for fp32 copy of weights, mom, variance
-    acts = (df_mlp['activation_buffer'].sum() + df_sa['activation_buffer'].sum()) * (depth // pp) # store microbatch of acts
-    # assume 1F1B
-    acts *= pp # at most pp stages of acts need to be maintained for this so not multiplied by number of micro batches
-    mem = wts + wts_grad + wts_optimizer_states + acts
+
     if verbose:
         print('mem consumed = {}'.format(mem))
-    stats = {'t_comp': t_comp,
-             't_mem': t_mem,
+    stats = {'t': t,
+             'mem': mem,
+             't_comp': t_comp,
+             't_mem_exposed': t_mem,
              't_comm': t_comm,
+             't_dp_comm': t_dp_comm,
+             't_pp_comm': t_pp_comm,
              't_bubble': bubble_time,
              'eff': t_comp / t,
              'comm_frac': t_comm / t,
+             'dp_comm_frac': t_dp_comm / t,
              'bubble_frac': bubble_time / t,
+             'mem_frac': t_mem / t,
              'wts': wts,
              'wts_grad': wts_grad,
              'wts_optimizer_states': wts_optimizer_states,
@@ -142,20 +176,39 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
                 if dp > global_batch_size:
                     continue
                 for micro_batch_size in micro_batch_size_candidates(global_batch_size, tp, pp, dp):
-#                    print("mbs = {}, dp = {}, tp = {}, pp = {}".format(micro_batch_size, dp, tp, pp))
-                    c = (dp, tp, pp, micro_batch_size)
-                    if c not in cands: # some duplicate configs due to max pipelining
-                        cands.append(c)
+                    for nv1, nv2, nv3 in nv_candidates_1d(tp, pp, dp, nvs):
+                        c = (dp, tp, pp, micro_batch_size, nv1, nv2, nv3)
+                        if c not in cands: # some duplicate configs due to max pipelining
+                            cands.append(c)
 
-        for (dp, tp, pp, mbs) in cands:
+        for (dp, tp, pp, mbs, nv1, nv2, nv3) in cands:
             m1 = tp
-            t1 = m1 if tp <= nvs else nvs # topology: num gpus in nvdomain is all if nvdomain is bigger, else use complete nvdomain
+#            t1 = m1 if tp <= nvs else nvs # topology: num gpus in nvdomain is all if nvdomain is bigger, else use complete nvdomain
+            t1 = nv1
+            t_dp = nv2
+            t_pp = nv3 #1 if nv3 != pp else pp # always bottlenecked by an off-node comm
             local_batch_size = global_batch_size // dp
 #            b = local_batch_size
             b = mbs # time one microbatch: careful
             df_mlp = mlp_1d(b, l, e, f, parallelism={'m': m1}, topology={'t': t1},  system=system)
             df_sa = sa_1d(b, l, e, h, parallelism={'m': m1}, topology={'t': t1}, flash_attention=True, system=system)
-            (t, mem), stats = totals(df_mlp, df_sa, depth, pp=pp, dp=dp, number_micro_batches=local_batch_size//mbs)
+             
+            # dp comms
+            # since dp is the only other comms, try to use nv domain for this too
+            df_dp = dataparallel(modules=[df_mlp, df_sa], depth=(depth//pp), dp=dp, t_dp=t_dp, overlap=True, system=system)
+
+            # pp comms
+            number_micro_batches = local_batch_size//mbs
+            # only communicate the last layer activations = first layer's (ln1) input buffer
+            p2p_comm_vol = float(df_mlp.loc[df_mlp['name'] == 'ln1']['activation_buffer'])
+            df_pp = pipelineparallel(modules=[df_mlp, df_sa], number_micro_batches=number_micro_batches, comm_vol=p2p_comm_vol, pp=pp, t_pp=t_pp, overlap=False, system=system)
+
+            # total time
+            (t, mem), stats = totals(df_mlp, df_sa, df_dp, df_pp, depth, pp=pp, dp=dp, number_micro_batches=number_micro_batches)
+            stats['nv_tp'] = t1
+            stats['nv_dp'] = t_dp
+            stats['nv_pp'] = t_pp
+
             throughput = global_batch_size / t
             if mem > capacity:
                 continue # not feasible
