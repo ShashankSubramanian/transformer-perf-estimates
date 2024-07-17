@@ -2046,12 +2046,12 @@ class PipelineParallel(Estimates):
 
         comm_bwd = self.comm_vol
         comm_bwd_type = 'p2p'
-        comm_bwd_size = 2 if t_pp == 1 else t_pp
+        comm_bwd_size = t_pp
         comm_bwd_topology = t_pp
         
         comm_fwd = self.comm_vol
         comm_fwd_type = 'p2p'
-        comm_fwd_size = 2 if t_pp == 1 else t_pp
+        comm_fwd_size = t_pp
         comm_fwd_topology = t_pp
 
         
@@ -2078,8 +2078,22 @@ class PipelineParallel(Estimates):
         t_mem = 0
         intensity = 0
 
-        # time for collective (P2P)
-        t_comm = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+        if self.pp == 1:
+            t_comm = 0
+        else:
+            # time for collective (P2P)
+            if comm_top > 1:
+                # some links are on the fast network
+                total_links = self.pp - 1
+                slow_links = int(self.pp / comm_top - 1)
+                fast_links = total_links - slow_links
+                t_comm_fast = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+                t_comm_slow = self.get_time_comm(comm, 1, comm_type, 1)  
+                t_comm = fast_links / total_links * t_comm_fast + slow_links / total_links * t_comm_slow
+            elif comm_top == 1:
+                t_comm = self.get_time_comm(comm, comm_size, comm_type, comm_top)  
+            else:
+                assert False, 'pipeline comm topology is incorrect'
 
         if self.overlap:
 #            t_prologue = self.warmup * max(t_comm - t_compute_overlap, 0)

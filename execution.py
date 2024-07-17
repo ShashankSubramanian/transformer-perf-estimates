@@ -138,6 +138,7 @@ def totals(df_mlp, df_sa, df_dp, df_pp, depth, pp=1, dp=1, number_micro_batches=
     if verbose:
         print('mem consumed = {}'.format(mem))
     stats = {'t': t,
+             'mem': mem,
              't_comp': t_comp,
              't_mem_exposed': t_mem,
              't_comm': t_comm,
@@ -185,7 +186,7 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
 #            t1 = m1 if tp <= nvs else nvs # topology: num gpus in nvdomain is all if nvdomain is bigger, else use complete nvdomain
             t1 = nv1
             t_dp = nv2
-            t_pp = 1 if nv3 != pp else pp # always bottlenecked by an off-node comm
+            t_pp = nv3 #1 if nv3 != pp else pp # always bottlenecked by an off-node comm
             local_batch_size = global_batch_size // dp
 #            b = local_batch_size
             b = mbs # time one microbatch: careful

@@ -51,9 +51,9 @@ if __name__ == '__main__':
     print('training on {} samples'.format(num_samples))
 
     global_batch_size = args.global_batch_size
-    systems = ['A100-NVL4', 'A100-NVL8', 'H200-NV4', 'H200-NVL8', 'B200-NVL4', 'B200-NVL8']
-    config_names = ['A100', 'A100', 'H200', 'H200', 'B200', 'B200']
-    nvlink_sizes = [4, 8, 4, 8, 4, 8]
+    systems = ['A100-NVL4', 'A100-NVL8', 'A100-NVL64', 'H200-NV4', 'H200-NVL8', 'H200-NVL64', 'B200-NVL4', 'B200-NVL8', 'B200-NVL64']
+    config_names = ['A100', 'A100', 'A100', 'H200', 'H200', 'H200', 'B200', 'B200', 'B200']
+    nvlink_sizes = [4, 8, 64, 4, 8, 64, 4, 8, 64]
     n_gpus = 2**np.array([i for i in range(2,15)])
     n_sys = len(systems)
 
