@@ -176,7 +176,7 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
                 if dp > global_batch_size:
                     continue
                 for micro_batch_size in micro_batch_size_candidates(global_batch_size, tp, pp, dp):
-                    for nv1, nv2, nv3 in nv_candidates_1d(tp, pp, dp, nvs):
+                    for nv1, nv2, nv3 in nv_candidates_1d(tp, dp, pp, nvs):
                         c = (dp, tp, pp, micro_batch_size, nv1, nv2, nv3)
                         if c not in cands: # some duplicate configs due to max pipelining
                             cands.append(c)
