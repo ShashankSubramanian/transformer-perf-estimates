@@ -2046,12 +2046,12 @@ class PipelineParallel(Estimates):
 
         comm_bwd = self.comm_vol
         comm_bwd_type = 'p2p'
-        comm_bwd_size = t_pp
+        comm_bwd_size = 2
         comm_bwd_topology = t_pp
         
         comm_fwd = self.comm_vol
         comm_fwd_type = 'p2p'
-        comm_fwd_size = t_pp
+        comm_fwd_size = 2
         comm_fwd_topology = t_pp
 
         

@@ -24,7 +24,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default='gpt3_1T', type=str, help="model type")
     parser.add_argument("--global_batch_size", default=4096, type=int, help="gobal batch size")
-    parser.add_argument("--parallel_strat", default='1d', type=str, help="tensor parallelization strategy")
+    parser.add_argument("--parallel_strat", default='1d', type=str, help="tensor parallelization strategy: 1d, 2d, 2d-seq")
     args = parser.parse_args()
 
     model_str = args.model
@@ -56,6 +56,7 @@ if __name__ == '__main__':
     nvlink_sizes = [4, 8, 64, 4, 8, 64, 4, 8, 64]
     n_gpus = 2**np.array([i for i in range(2,15)])
     n_sys = len(systems)
+    print(n_sys)
 
     t0 = time.time()
 
@@ -69,29 +70,37 @@ if __name__ == '__main__':
     print('rank {} is doing {}'.format(rank, systems))
 
     if args.parallel_strat == '1d':
-        for sidx, sys_str in enumerate(systems):
-            with open('systems/config-' + config_names[sidx] + '.json', 'r') as file:
-                system = json.load(file)
-            nvs_list = [nvlink_sizes[sidx]]
-            print(sys_str, nvs_list)
-            plots = []
-            for nvs in nvs_list:
-                t = []
-                conf = []
-                start = None
-                system['nvlink_size'] = nvs
-                configs = execute_1d(model, n_gpus, global_batch_size=global_batch_size, system=system, verbose=False, nlargest=10)
-                for s,config in enumerate(configs):
-                    if len(config) > 0: # check feasibility
-                        if not start and start != 0:
-                            start = s
-                        conf.append(config)
-                        t.append([c[0] for c in config])
-                t_max = [tm[0] for tm in t]
-                t_min = [tm[-1] for tm in t]
-                n_gpus = n_gpus[start:]
-                configs = configs[start:]
-                plots.append((nvs, t_max, t_min, n_gpus, configs))
-            np.save('outputs/exec_1d_{}_{}.npy'.format(model_str, sys_str), np.array(plots, dtype=object))
+        execute_fn = execute_1d
+    elif args.parallel_strat == '2d':
+        execute_fn = execute_2d
+    elif args.parallel_strat == '2d-seqp':
+        execute_fn = execute_seqp
+    else:
+        assert False, 'parallel strat not valid'
+
+    for sidx, sys_str in enumerate(systems):
+        with open('systems/config-' + config_names[sidx] + '.json', 'r') as file:
+            system = json.load(file)
+        nvs_list = [nvlink_sizes[sidx]]
+        print(sys_str, nvs_list)
+        plots = []
+        for nvs in nvs_list:
+            t = []
+            conf = []
+            start = None
+            system['nvlink_size'] = nvs
+            configs = execute_fn(model, n_gpus, global_batch_size=global_batch_size, system=system, verbose=False, nlargest=10)
+            for s,config in enumerate(configs):
+                if len(config) > 0: # check feasibility
+                    if not start and start != 0:
+                        start = s
+                    conf.append(config)
+                    t.append([c[0] for c in config])
+            t_max = [tm[0] for tm in t]
+            t_min = [tm[-1] for tm in t]
+            n_gpus = n_gpus[start:]
+            configs = configs[start:]
+            plots.append((nvs, t_max, t_min, n_gpus, configs))
+        np.save('outputs/exec_{}_{}_{}.npy'.format(args.parallel_strat, model_str, sys_str), np.array(plots, dtype=object))
 
     print('time for script = {}'.format(time.time() - t0))
