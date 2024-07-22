@@ -197,7 +197,7 @@ def mlp_seqp(b, l, e, f, parallelism={'m1': 1, 'm2': 1}, topology={'t1': 1, 't2'
             X = dropout(X)
             (b,l/m2,f/m1) = (b,l/m2,f/m1) * (b,l/m2,f/m1) [random mask]
             X = linear(X)
-            (b,l/m2,e/m1) = (b,l/m2,f/m1) * (f/m2,e/m1) + (1,e/m1)
+            (b,l/m2,e/m1) = (b,l/m2,f/m1) * (f/m1,e) + (1,e)
             X = dropout(X)
             (b,l/m2,e/m1) = (b,l/m2m1,e) * (b,l/m2m1,e) [random mask]
             X = norm(X)

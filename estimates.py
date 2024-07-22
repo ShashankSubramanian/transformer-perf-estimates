@@ -91,6 +91,7 @@ class Estimates():
     def get_time_flops(self, flops):
         ''' time to execute flops '''
         hardware_flops = self.system['matrix_flops_fp16'] if self.use_tensor_cores else self.system['vector_flops_fp16']
+        hardware_flops *= 0.8 # some avg efficiency
         t_flops = 20 * 1E-6 + flops / hardware_flops
         return t_flops
 
@@ -124,27 +125,39 @@ class Estimates():
         nic_factor = system['nic_factor'] # number of nics per GPU (can be 0.5 etc)
         assert topology <= nvs, 'you have provisioned more gpus than nvlink domain size for fast comm'
 
-        # define some pre-factors assuming bus bw from nccl perf docs
+        if n_gpus == 1:
+            return 0 # no comms
+
         # nodes here just means number of nvlink domains: careful
         nodes = n_gpus // topology # note topology controls how many gpus you are using in the nvlink domain
-        # ring correction 
-        correction = (n_gpus - 1) / n_gpus
+        # ring corrections
+        if comm_type == 'p2p':
+            assert n_gpus == 2, 'p2p comms is btw pair of gpus'
+            if topology == 1: # all ib
+                t_comm = ls * (n_gpus - 1) + vol / bs
+            else:
+                t_comm = lf * (n_gpus - 1) + vol / bf # faster p2p
+            return t_comm
+
+        if comm_type not in ['reduce', 'broadcast']:
+            correction = (n_gpus - 1) / n_gpus
+        else:
+            correction = 1
 
         if topology == 1: # all ib
-            t_comm = vol / bs
+            t_comm = ls * (n_gpus - 1) + correction * vol / bs
         elif nodes == 1:
-            t_comm = vol / bf # has nvlink and only one node
+            t_comm = lf * (n_gpus - 1) + correction * vol / bf # has nvlink and only one node
         else:
-            t_comm = max(vol / (nic_factor * topology * bs), vol / bf)
-
-        # ring corrections
-        if comm_type not in ['reduce', 'broadcast', 'p2p']:
-            t_comm *= correction
-
-        if comm_type == 'allreduce':
-            t_comm *= 2
+            # multiple rings 
+            num_rings = nic_factor * topology # number of nics per node
+            t1 = correction * vol / (num_rings * bs)
+            t2 = correction * vol / bf
+            t_comm = max(t1, t2)
+            if comm_type == 'allreduce':
+                t_comm *= 2
+            t1_l = ls * (nodes - 1)
+            t2_l = lf * (n_gpus - nodes)
+            t_comm += (t1_l + t2_l) # add latencies
 
         return t_comm
-
-
-            
