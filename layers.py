@@ -179,7 +179,7 @@ class LinearSeqp(Estimates):
         mem_fwd = activation_in_mem + activation_out_mem + weights_mem
 
         # sync/comm layers: no comms for seq
-        comm_fwd = (b * l * f) * element_size if m2 > 1 else 0
+        comm_fwd = (b * l_local * f) * element_size if m2 > 1 else 0
         comm_fwd_type = 'reducescatter'
         comm_fwd_size = m2
         comm_fwd_topology = t2
@@ -198,7 +198,7 @@ class LinearSeqp(Estimates):
         mem_bwd = weights_grad_mem + xgrad_mem + num_bwd_ops * ygrad_mem + weights_mem + activation_buffer
 
         # sync/comm layers
-        comm_bwd = (b * l * e) * element_size if m1 > 1 else 0
+        comm_bwd = (b * l_local * e) * element_size if m1 > 1 else 0
         comm_bwd_type = 'reducescatter'
         comm_bwd_size = m1
         comm_bwd_topology = t1

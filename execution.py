@@ -102,7 +102,7 @@ def summa_nb_candidates(tp1, tp2, embed):
     end = np.log2(embed // start)
     nb_range = (start * 2**np.arange(0, end)).astype(int)
     # print(nb_range)
-    max_dim = 1024
+    max_dim = 512
     if embed / nb_range[0] < max_dim:
         yield nb_range[0]
     else:
