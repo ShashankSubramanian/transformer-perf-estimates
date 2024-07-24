@@ -13,36 +13,36 @@ def factors(n):
         if n % c == 0:
             yield c
 
-def tp1d_candidates(n, heads, hidden):
+def tp1d_candidates(n, heads, embed):
     # candidates for tensor parallelism in 1D
     for c in factors(n):
-        if c <= heads and c <= hidden:
+        if heads % c == 0 and embed % c == 0:
             yield c
 
 def tp2d_candidates_dim1(n, heads, embed):
     # candidates for tensor parallelism in 2D in 1st dim
     for c in factors(n):
-        if c <= heads and c <= embed: # for m1: use heads or e/f
+        if heads % c == 0 and embed % c == 0:
             yield c
 
 def tp2d_candidates_dim2(n, tp1, sequence, embed):
     # candidates for tensor parallelism in 2D in 2nd dim
     tp2 = n // tp1 # use remaining for other dim (seq)
     for c in factors(tp2):
-        if c <= sequence and c <= embed: # for m2: use sequence or e/f
+        if sequence % c == 0 and embed % c  == 0: # for m2: use sequence or e/f
             yield c
 
 def tpseqp_candidates_dim1(n, heads, embed):
     # candidates for tensor parallelism in seqp in 1st dim
     for c in factors(n):
-        if c <= heads and c <= embed: # for m1: use heads or e/f
+        if heads % c == 0 and embed % c == 0:
             yield c
 
 def tpseqp_candidates_dim2(n, tp1, sequence):
     # candidates for tensor parallelism in seqp in 2nd dim
     tp2 = n // tp1 # use remaining for other dim (seq)
     for c in factors(tp2):
-        if c <= sequence and c * tp1 <= sequence: # tp1 and tp2 can be used for seq
+        if sequence % c == 0 and sequence % (c * tp1) == 0: # tp1 and tp2 are used for seq
             yield c
 
 def nv_candidates_1d(tp, dp, pp, nvs):
@@ -190,8 +190,8 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
         cands = set()
         configs_per_n = []
 
-        for tp in tp1d_candidates(n, h, f):
-            if f // tp < 512:
+        for tp in tp1d_candidates(n, h, e):
+            if (3*e) // tp < 512:
                 continue
 
             for pp in pp_candidates(n, tp, depth):
@@ -205,7 +205,7 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
                         if c not in cands:
                             cands.add(c)
 
-        #print('n = {}, nvs = {}, cands = {}'.format(n, nvs, len(cands)))
+        print('n = {}, nvs = {}, cands = {}'.format(n, nvs, len(cands)))
         for (dp, tp, pp, mbs, nv1, nv2, nv3) in cands:
             m1 = tp
             t1 = nv1
