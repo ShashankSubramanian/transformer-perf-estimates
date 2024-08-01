@@ -25,11 +25,11 @@ def tp2d_candidates_dim1(n, heads, embed):
         if heads % c == 0 and embed % c == 0:
             yield c
 
-def tp2d_candidates_dim2(n, tp1, sequence, embed):
+def tp2d_candidates_dim2(n, tp1, embed):
     # candidates for tensor parallelism in 2D in 2nd dim
     tp2 = n // tp1 # use remaining for other dim (seq)
     for c in factors(tp2):
-        if sequence % c == 0 and embed % c  == 0: # for m2: use sequence or e/f
+        if  embed % c  == 0: # for m2: use sequence or e/f; sequence is checked in microbatch candidates
             yield c
 
 def tpseqp_candidates_dim1(n, heads, embed):
@@ -38,12 +38,12 @@ def tpseqp_candidates_dim1(n, heads, embed):
         if heads % c == 0 and embed % c == 0:
             yield c
 
-def tpseqp_candidates_dim2(n, tp1, sequence):
+def tpseqp_candidates_dim2(n, tp1):
     # candidates for tensor parallelism in seqp in 2nd dim
     tp2 = n // tp1 # use remaining for other dim (seq)
     for c in factors(tp2):
-        if sequence % c == 0 and sequence % (c * tp1) == 0: # tp1 and tp2 are used for seq
-            yield c
+#        if sequence % c == 0 and sequence % (c * tp1) == 0: # tp1 and tp2 are used for seq
+        yield c # tp1 and tp2 are used for b*l, so checked in microbatch
 
 def nv_candidates_1d(tp, dp, pp, nvs):
     ''' candidates for fast domain '''
@@ -86,13 +86,12 @@ def get_dp(n, tp, pp):
     assert n % (tp * pp) == 0
     return n // (tp * pp)
 
-def micro_batch_size_candidates(global_batch_size, tp, pp, dp):
+def micro_batch_size_candidates(global_batch_size, tp, pp, dp, l):
     assert global_batch_size % dp == 0 # dont think this matters too much
     local_batch_size = global_batch_size // dp
-    if pp == 1:
-        yield local_batch_size
-    else:
-        for c in factors(local_batch_size):
+    for c in factors(local_batch_size):
+        bl = c * l
+        if bl % tp == 0:  # bl should divide tp or tp2
             yield c
 
 def summa_nb_candidates(tp1, tp2, embed):
@@ -191,7 +190,7 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
         configs_per_n = []
 
         for tp in tp1d_candidates(n, h, e):
-            if (3*e) // tp < 512:
+            if (3*e) // tp < 128:
                 continue
 
             for pp in pp_candidates(n, tp, depth):
@@ -199,12 +198,16 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
                 if dp > global_batch_size or global_batch_size % dp != 0:
                     continue
 
-                for micro_batch_size in micro_batch_size_candidates(global_batch_size, tp, pp, dp):
+                for micro_batch_size in micro_batch_size_candidates(global_batch_size, tp, pp, dp, l):
                     for nv1, nv2, nv3 in nv_candidates_1d(tp, dp, pp, nvs):
                         c = (dp, tp, pp, micro_batch_size, nv1, nv2, nv3)
                         if c not in cands:
                             cands.add(c)
 
+        
+#        for (dp, tp, pp, mbs, nv1, nv2, nv3) in cands:
+#            if tp == 64 and pp == 1:
+#                print(tp, pp, dp, mbs)
         print('n = {}, nvs = {}, cands = {}'.format(n, nvs, len(cands)))
         for (dp, tp, pp, mbs, nv1, nv2, nv3) in cands:
             m1 = tp
@@ -248,14 +251,14 @@ def candidate_filter_2d(args):
     tp1, tp2, tp, global_batch_size, depth, n, h, e, l, nvs = args
     filtered_cands = []
     
-    if e // tp1 < 512 or l // tp2 < 512:
+    if e // tp1 < 128 or l // tp2 < 128:
         return filtered_cands
     
     for pp in pp_candidates(n, tp, depth):
         dp = get_dp(n, tp, pp)
         if dp > global_batch_size or global_batch_size % dp != 0:
             continue
-        for micro_batch_size in micro_batch_size_candidates(global_batch_size, tp, pp, dp):
+        for micro_batch_size in micro_batch_size_candidates(global_batch_size, tp2, pp, dp, l): # tp2 is used to shard bl
             for nb in summa_nb_candidates(tp1, tp2, e):
                 for nv1, nv2, nv3, nv4 in nv_candidates_2d(tp1, tp2, dp, pp, nvs):
                     c = (dp, tp1, tp2, pp, micro_batch_size, nb, nv1, nv2, nv3, nv4)
@@ -278,7 +281,7 @@ def execute_2d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
         configs_per_n = []
         
         tp1_candidates = list(tp2d_candidates_dim1(n, h, e))
-        tp2_candidates = [(tp1, tp2) for tp1 in tp1_candidates for tp2 in tp2d_candidates_dim2(n, tp1, l, e)]
+        tp2_candidates = [(tp1, tp2) for tp1 in tp1_candidates for tp2 in tp2d_candidates_dim2(n, tp1, e)]
         
         args = [(tp1, tp2, tp1 * tp2, global_batch_size, depth, n, h, e, l, nvs) for tp1, tp2 in tp2_candidates]
         
@@ -290,6 +293,9 @@ def execute_2d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
                 cands.add(c)
     
         cands = list(cands)
+#        for c in cands:
+#            if c[1] == 8 and c[2] == 8 and c[3] == 1:
+#                print(c)
         print('n = {}, nvs = {}, cands = {}'.format(n, nvs, len(cands)))
 #    print(n_gpus)
 #    for n in n_gpus:
@@ -356,14 +362,14 @@ def candidate_filter_seqp(args):
     tp1, tp2, tp, global_batch_size, depth, n, h, e, l, nvs = args
     filtered_cands = []
     
-    if e // tp1 < 512 or l // tp2 < 512:
+    if e // tp1 < 128 or l // tp2 < 128:
         return filtered_cands
     
     for pp in pp_candidates(n, tp, depth):
         dp = get_dp(n, tp, pp)
         if dp > global_batch_size or global_batch_size % dp != 0:
             continue
-        for micro_batch_size in micro_batch_size_candidates(global_batch_size, tp, pp, dp):
+        for micro_batch_size in micro_batch_size_candidates(global_batch_size, tp, pp, dp, l): # tp1*tp2 is used to shard bl
             for nv1, nv2, nv3, nv4 in nv_candidates_2d(tp1, tp2, dp, pp, nvs):
                 c = (dp, tp1, tp2, pp, micro_batch_size, nv1, nv2, nv3, nv4)
                 filtered_cands.append(c)
@@ -385,7 +391,7 @@ def execute_seqp(model, n_gpus, global_batch_size=2048, system={}, verbose=False
         configs_per_n = []
         
         tp1_candidates = list(tpseqp_candidates_dim1(n, h, e))
-        tp2_candidates = [(tp1, tp2) for tp1 in tp1_candidates for tp2 in tpseqp_candidates_dim2(n, tp1, l)]
+        tp2_candidates = [(tp1, tp2) for tp1 in tp1_candidates for tp2 in tpseqp_candidates_dim2(n, tp1)]
         
         args = [(tp1, tp2, tp1 * tp2, global_batch_size, depth, n, h, e, l, nvs) for tp1, tp2 in tp2_candidates]
         
