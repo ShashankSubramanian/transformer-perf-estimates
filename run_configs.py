@@ -45,13 +45,13 @@ if __name__ == '__main__':
     else:
         total_tokens = 300 * 10**9
     num_samples = total_tokens / l
-    if model_str == 'vit_era5':
+    if 'vit_era5' in model_str:
         num_ep = 80
         num_samples = 350000 * num_ep
     print('training on {} samples'.format(num_samples))
 
     global_batch_size = args.global_batch_size
-    systems = ['A100-NVL4', 'A100-NVL8', 'A100-NVL64', 'H200-NV4', 'H200-NVL8', 'H200-NVL64', 'B200-NVL4', 'B200-NVL8', 'B200-NVL64']
+    systems = ['A100-NVS4', 'A100-NVS8', 'A100-NVS64', 'H200-NVS4', 'H200-NVS8', 'H200-NVS64', 'B200-NVS4', 'B200-NVS8', 'B200-NVS64']
     config_names = ['A100', 'A100', 'A100', 'H200', 'H200', 'H200', 'B200', 'B200', 'B200']
     nvlink_sizes = [4, 8, 64, 4, 8, 64, 4, 8, 64]
     n_gpus = 2**np.array([i for i in range(2,15)])
