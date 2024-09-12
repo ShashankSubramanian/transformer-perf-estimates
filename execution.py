@@ -8,6 +8,10 @@ from multiprocessing import Pool
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
+
+''' functions to get the candidate number of GPUs assigned to each parallelism
+    as well as number of GPUs assigned to the fast bandwidth (NVS) domain '''
+
 def factors(n):
     for c in range(1, n+1):
         if n % c == 0:
@@ -60,7 +64,7 @@ def nv_candidates_1d(tp, dp, pp, nvs):
                     yield (n1, n2, n3)
 
 def nv_candidates_2d(tp1, tp2, dp, pp, nvs):
-    ''' candidates for fast domain '''
+    ''' candidates for fast domain  in 2D versions of TP'''
     total = tp1 * tp2 * dp * pp
     if total <= nvs:
         yield (tp1, tp2, dp, pp) # all in nv domain
@@ -77,6 +81,7 @@ def nv_candidates_2d(tp1, tp2, dp, pp, nvs):
 
 
 def pp_candidates(n, tp, depth):
+    # pipeline candidates
     max_pp = min(n // tp, depth)
     for c in factors(max_pp):
         if n % (tp * c) == 0 and depth % c == 0: # assume equal pp
@@ -95,6 +100,7 @@ def micro_batch_size_candidates(global_batch_size, tp, pp, dp, l):
             yield c
 
 def summa_nb_candidates(tp1, tp2, embed):
+    # candidates for SUMMA nb
     # nb starts from max(m1, m2) until embed. could have more for hidden/seq
     # but restrict it to this for now to keep it simple
     start = max(tp1, tp2)
@@ -110,6 +116,7 @@ def summa_nb_candidates(tp1, tp2, embed):
                 yield c
 
 def totals(df_mlp, df_sa, df_dp, df_pp, depth, pp=1, dp=1, number_micro_batches=1, verbose=False):
+    ''' total time to do forward and backward pass given all the parallelism '''
     # flops
     flops_per_gpu = (df_mlp['flops_fwd'].sum() + df_mlp['flops_bwd'].sum() + df_sa['flops_fwd'].sum() + df_sa['flops_bwd'].sum()) * (depth // pp) * number_micro_batches
     # time
@@ -157,24 +164,25 @@ def totals(df_mlp, df_sa, df_dp, df_pp, depth, pp=1, dp=1, number_micro_batches=
              'flops_per_gpu': flops_per_gpu,
              'mem': mem,
              't_comp': t_comp,
-             't_mem_exposed': t_mem,
-             't_comm': t_comm,
+             't_mem': t_mem,
+             't_tp_comm': t_comm,
              't_dp_comm': t_dp_comm,
              't_pp_comm': t_pp_comm,
              't_bubble': bubble_time,
-             'eff': t_comp / t,
-             'comm_frac': t_comm / t,
+             'comp_frac': t_comp / t,
+             'tp_comm_frac': t_comm / t,
              'dp_comm_frac': t_dp_comm / t,
              'pp_comm_frac': t_pp_comm / t,
              'bubble_frac': bubble_time / t,
              'mem_frac': t_mem / t,
-             'wts': wts,
-             'wts_grad': wts_grad,
-             'wts_optimizer_states': wts_optimizer_states,
-             'acts': acts}
+             'wts_mem': wts,
+             'wts_grad_mem': wts_grad,
+             'wts_optimizer_states_mem': wts_optimizer_states,
+             'acts_mem': acts}
     return (t, mem), stats
 
 def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, nlargest=10):
+    ''' run solver to do the 1D TP search '''
     configs = []
 
     l = model['l']
@@ -205,10 +213,7 @@ def execute_1d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
                             cands.add(c)
 
         
-#        for (dp, tp, pp, mbs, nv1, nv2, nv3) in cands:
-#            if tp == 64 and pp == 1:
-#                print(tp, pp, dp, mbs)
-        print('n = {}, nvs = {}, cands = {}'.format(n, nvs, len(cands)))
+        print('num gpus = {}, nvs domain size = {}, #possible candidates = {}'.format(n, nvs, len(cands)))
         for (dp, tp, pp, mbs, nv1, nv2, nv3) in cands:
             m1 = tp
             t1 = nv1
@@ -266,6 +271,7 @@ def candidate_filter_2d(args):
     return filtered_cands
 
 def execute_2d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, nlargest=10):
+    ''' run solver to do the 2D TP (SUMMA) search '''
     configs = []
 
     l = model['l']
@@ -293,29 +299,7 @@ def execute_2d(model, n_gpus, global_batch_size=2048, system={}, verbose=False, 
                 cands.add(c)
     
         cands = list(cands)
-#        for c in cands:
-#            if c[1] == 8 and c[2] == 8 and c[3] == 1:
-#                print(c)
-        print('n = {}, nvs = {}, cands = {}'.format(n, nvs, len(cands)))
-#    print(n_gpus)
-#    for n in n_gpus:
-#        cands = []
-#        configs_per_n = []
-#        for tp1 in tp2d_candidates_dim1(n, h, e):
-#            for tp2 in tp2d_candidates_dim2(n, tp1, l, e):
-#                tp = tp1 * tp2
-#                if e // tp1 < 512 or l // tp2 < 512:
-#                    continue
-#                for pp in pp_candidates(n, tp, depth):
-#                    dp = get_dp(n, tp, pp)
-#                    if dp > global_batch_size or global_batch_size % dp != 0:
-#                        continue
-#                    for micro_batch_size in micro_batch_size_candidates(global_batch_size, tp, pp, dp):
-#                        for nb in summa_nb_candidates(tp1, tp2, e):
-#                            for nv1, nv2, nv3, nv4 in nv_candidates_2d(tp1, tp2, dp, pp, nvs):
-#                                c = (dp, tp1, tp2, pp, micro_batch_size, nb, nv1, nv2, nv3, nv4)
-#                                if c not in cands: # some duplicate configs due to max pipelining
-#                                    cands.append(c)
+        print('num gpus = {}, nvs domain size = {}, #possible candidates = {}'.format(n, nvs, len(cands)))
 
         for (dp, tp1, tp2, pp, mbs, nb, nv1, nv2, nv3, nv4) in cands:
             m1 = tp1
@@ -376,6 +360,7 @@ def candidate_filter_seqp(args):
     return filtered_cands
 
 def execute_seqp(model, n_gpus, global_batch_size=2048, system={}, verbose=False, nlargest=10):
+    ''' run solver to do the 2D TP (context parallel or sequence parallel) search '''
     configs = []
 
     l = model['l']
@@ -403,22 +388,7 @@ def execute_seqp(model, n_gpus, global_batch_size=2048, system={}, verbose=False
                 cands.add(c)
     
         cands = list(cands)
-        print('n = {}, nvs = {}, cands = {}'.format(n, nvs, len(cands)))
-#    for n in n_gpus:
-#        cands = []
-#        configs_per_n = []
-#        for tp1 in tpseqp_candidates_dim1(n, h, e):
-#            for tp2 in tpseqp_candidates_dim2(n, tp1, l):
-#                tp = tp1 * tp2
-#                for n1, n2 in nv_candidates(tp1, tp2, nvs):
-#                    for pp in pp_candidates(n, tp, depth):
-#                        dp = get_dp(n, tp, pp)
-#                        if dp > global_batch_size:
-#                            continue
-#                        for micro_batch_size in micro_batch_size_candidates(global_batch_size, tp, pp, dp):
-#                            c = (dp, tp1, tp2, pp, micro_batch_size, n1, n2)
-#                            if c not in cands: # some duplicate configs due to max pipelining
-#                                cands.append(c)
+        print('num gpus = {}, nvs domain size = {}, #possible candidates = {}'.format(n, nvs, len(cands)))
 
         for (dp, tp1, tp2, pp, mbs, nv1, nv2, nv3, nv4) in cands:
             m1 = tp1

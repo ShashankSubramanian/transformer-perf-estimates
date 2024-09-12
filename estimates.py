@@ -1,6 +1,5 @@
 import numpy as np
 import json
-from time_projections import nccl_bw_sigmoid
 
 class Estimates():
     def __init__(self, system=None):
@@ -51,6 +50,7 @@ class Estimates():
         self.comm_bwd_type = comm_bwd_type
         self.comm_bwd_size = comm_bwd_size
         self.comm_bwd_topology = comm_bwd_topology
+        # TODO: recompute not tested/implemented fully
         self.recompute = recompute # do fwd pass again
 
         # what to see 

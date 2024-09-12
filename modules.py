@@ -653,3 +653,11 @@ def pipelineparallel(modules=[],
     summary.append(pp_comms.get_stats())
     return pd.DataFrame(summary)
 
+def print_df(df_mlp, df_sa):
+    ''' prints stats of transformer dataframe '''
+    cols = df_mlp.columns.tolist()
+    layer_track_cols = ['activation_buffer', 'weights_mem',
+                        'weights_grad_mem', 'flops_fwd', 'flops_bwd',
+                        't_fwd', 't_fwd_comm', 't_bwd', 't_bwd_comm']
+    display(df_mlp[cols])
+    display(df_sa[cols])
