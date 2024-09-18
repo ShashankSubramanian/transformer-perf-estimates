@@ -47,9 +47,10 @@ We also include notebooks to plot different performance metrics in `plots/`.
 	mpirun -np 9 python run_configs.py --model gpt3_1T --parallel_strat 1d --global_batch_size 4096
 	```
 	Note that, for 2D versions of tensor parallelism, it might take several minutes to finish since the design/candidate space is large. 1D tensor parallelism is quick. 
-	There are already example outputs for `gp3_1T` and `vit_era5` models (see the paper in references for the model explanations) for all the 9 systems in `outputs/`. Using them, you can directly run [plots/plot_overall_perf.ipynb](plots/plot_overall_perf.ipynb) (without generating the configs), to show strong scaling plots as well as optimal configurations, time broken down by various components, memory used on HBM as a function of #GPUs and system. Follow the notebook to get these plots.
+	There are already example outputs for `gp3_1T` and `vit_era5` models (see the paper in references for the model explanations) for all the 9
+	systems in `outputs/`. Using them, you can directly run [plots/plots_overall_perf.ipynb](plots/plots_overall_perf.ipynb) (without generating the configs), to show strong scaling plots as well as optimal configurations, time broken down by various components, memory used on HBM as a function of #GPUs and system. Follow the notebook to get these plots.
 
-* **Sweep parallelization configurations to understand bottlenecks**: In [plots/plot_sweep_parallel_configs.ipynb](plots/plot_sweep_parallel_configs.ipynb), we show simple plots to sweep over a range of parallel configurations and see their effect, as well as effect of NVLINK sizes, on different bottlenecks. It also provides simple visualizations of the design-space to show the subtle non-convexities in the space when searching for the optimal configurations. Different cells focus on 1D and the different 2D tensor parallelism strategies.
+* **Sweep parallelization configurations to understand bottlenecks**: In [plots/plots_sweep_parallel_configs.ipynb](plots/plots_sweep_parallel_configs.ipynb), we show simple plots to sweep over a range of parallel configurations and see their effect, as well as effect of NVLINK sizes, on different bottlenecks. It also provides simple visualizations of the design-space to show the subtle non-convexities in the space when searching for the optimal configurations. Different cells focus on 1D and the different 2D tensor parallelism strategies.
 * Sweep system parameters to understand system design choices: `TODO`
 
 ## Reference
