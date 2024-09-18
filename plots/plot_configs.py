@@ -47,33 +47,33 @@ def plot_configs(n_values, time_total, time_parts_normalized,
         plt.bar(log_n_values + 2.5 * bar_width, pp_values, bar_width, label=r'$n_p$ PP', color='orange')
 
     if use_log_scale:
-        plt.xlabel('#GPUs', fontsize=16)
-        plt.xticks(log_n_values, n_values, fontsize=14)
+        plt.xlabel('#GPUs', fontsize=18)
+        plt.xticks(log_n_values, n_values, fontsize=18)
     else:
-        plt.xlabel('#Config', fontsize=16)
-        plt.xticks(log_n_values, [chr(65 + i) for i in n_values], fontsize=14)
-    plt.ylabel('Values', fontsize=16)
-    plt.title('Parallelization Configuration', fontsize=16)
+        plt.xlabel('#Config', fontsize=18)
+        plt.xticks(log_n_values, [chr(65 + i) for i in n_values], fontsize=18)
+    plt.ylabel('Values', fontsize=18)
+    plt.title('Parallelization Configuration', fontsize=18)
     plt.yscale('log', base=2)
     top = max(max(m_values), max(tp_values), max(dp_values), max(pp_values))
     top2 = int(np.ceil(np.log2(top)))+1
     plt.ylim([0.1, top * 2])
-    plt.yticks([2**i for i in range(0, top2)], [2**i for i in range(0, top2)], fontsize=14)
+    plt.yticks([2**i for i in range(0, top2)], [2**i for i in range(0, top2)], fontsize=18)
     if use_log_scale:
         plt.xlim([np.log2(n_values[0]) - 1, np.log2(n_values[-1]) + 1])
-    plt.legend(fontsize=16, loc='upper left')
+    plt.legend(fontsize=18, loc='upper left')
     plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='gray')
     plt.tight_layout()
 
     # add mem values as a twin
     ax3 = plt.gca().twinx()
     ax3.plot(log_n_values, mem_values, color='black', linewidth=1, linestyle='--', marker='o', label='Memory Usage')
-    ax3.set_ylabel('Memory Usage (in GB)', fontsize=16, color='black')
-    ax3.tick_params(axis='y', labelcolor='black', labelsize=14)
+    ax3.set_ylabel('Memory Usage (in GB)', fontsize=18, color='black')
+    ax3.tick_params(axis='y', labelcolor='black', labelsize=18)
     ax3.set_ylim(0, 200)
 
     lines, labels = ax3.get_legend_handles_labels()
-    plt.legend(lines, labels, fontsize=16, loc='upper right')
+    plt.legend(lines, labels, fontsize=18, loc='upper right')
     plt.tight_layout()
 
     # Second plot: Time vs n as a stacked bar plot with percentages and total time line
@@ -91,35 +91,35 @@ def plot_configs(n_values, time_total, time_parts_normalized,
         # Add percentage text
         for j, h in enumerate(height):
             if h > 1:  # Only show percentage if it's greater than 1%
-                ax1.text(log_n_values[j], bottom[j] - h/2, f'{h:.0f}%', ha='center', va='center', color='white', fontsize=9)
+                ax1.text(log_n_values[j], bottom[j] - h/2, f'{h:.0f}%', ha='center', va='center', color='white', fontsize=14)
 
     if use_log_scale:
-        ax1.set_xlabel('#GPUs', fontsize=16)
+        ax1.set_xlabel('#GPUs', fontsize=18)
         ax1.set_xticks(log_n_values)
-        ax1.set_xticklabels(n_values, fontsize=14)
+        ax1.set_xticklabels(n_values, fontsize=18)
     else:
-        ax1.set_xlabel('#Config', fontsize=16)
+        ax1.set_xlabel('#Config', fontsize=18)
         ax1.set_xticks(log_n_values)
-        ax1.set_xticklabels([chr(65 + i) for i in n_values], fontsize=14)
-    ax1.set_ylabel('Normalized Time (%)', fontsize=16)
-    ax1.set_title('Time', fontsize=16)
+        ax1.set_xticklabels([chr(65 + i) for i in n_values], fontsize=18)
+    ax1.set_ylabel('Normalized Time (%)', fontsize=18)
+    ax1.set_title('Time', fontsize=18)
     if use_log_scale:
         ax1.set_xlim([np.log2(n_values[0]) - 1, np.log2(n_values[-1]) + 1])
-    ax1.legend(fontsize=12, loc='upper left')
-    ax1.tick_params(axis='y', labelsize=14)
+    ax1.legend(fontsize=18, loc='upper left')
+    ax1.tick_params(axis='y', labelsize=18)
 
     ax1.set_ylim(0, 115)  # Set to slightly over 100% to give some headroom
 
     # add total time as well
     ax2 = ax1.twinx()
     ax2.plot(log_n_values, time_total, color='black', linewidth=1, linestyle='--', marker='o', label='Total Time')
-    ax2.set_ylabel('Time per Iteration (s)', fontsize=16, color='black')
-    ax2.tick_params(axis='y', labelcolor='black', labelsize=14)
+    ax2.set_ylabel('Time per Iteration (s)', fontsize=18, color='black')
+    ax2.tick_params(axis='y', labelcolor='black', labelsize=18)
     ax2.set_yscale('log', base=2)
     ax2.set_ylim(min(time_total) / 2, max(time_total) * 2)
     lines, labels = ax2.get_legend_handles_labels()
-    ax1.legend(fontsize=16, loc='upper left')
-    ax2.legend(lines, labels, fontsize=16, loc='upper right')
+    ax1.legend(fontsize=18, loc='upper left')
+    ax2.legend(lines, labels, fontsize=18, loc='upper right')
     plt.tight_layout()
     plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='gray')
     return plt
