@@ -27,7 +27,10 @@ def plot_configs(n_values, time_total, time_parts_normalized,
     '''
     plt.figure(figsize=(12, 10))
     plt.subplot(2, 1, 1)
-    bar_width = 0.2
+    if len(tp1_values) == 0: # 1D
+        bar_width = 0.2
+    else:
+        bar_width = 0.15
     if use_log_scale: #
         log_n_values = np.log2(n_values)
     else:

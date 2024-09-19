@@ -10,4 +10,4 @@ srun -u --mpi=pmi2 -N 1 -n $N --cpus-per-task 12 shifter --image=${image} --modu
     "
 
 ## On your machine (or equivalent)
-# mpirun -np 9 python run_configs.py --model gpt3_1T --parallel_strat 1d --global_batch_size 4096"
+# mpirun -np 9 python run_configs.py --model gpt3_1T --parallel_strat 1d --global_batch_size 4096
