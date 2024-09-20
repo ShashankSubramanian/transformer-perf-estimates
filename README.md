@@ -38,6 +38,8 @@ configs = execute_1d(model, [total_gpus], global_batch_size=global_batch_size,
 top_configs_to_print = 1 # how many configs to print? max 100 but dont print all 
 pprint.pprint(configs[0][0:top_configs_to_print]) 
 ```
+In [execution.py](execution.py), we define the search space by enumerating candidates for the different parallelization strategies and the assignment of GPUs to the NVLINK/NVSWITCH domain. In function `def totals(..)`, we take care of other optimizations such as distributed optimizer as well as pipeline bubbles when computing total time and keep track of important metrics. The `def  execute_<parallel_strat>(...)` functions loop over all candidates and keeps a priority queue of the top candidates (least training times) and returns the top *n* candidates. 
+
 The notebook also enables you to modify the parallel configurations, allowing you to experiment with different parallelization strategies and understand the various bottlenecks. It also provides a breakdown of metrics for each layer of the transformer independently, helping you identify which layers contribute most to specific bottlenecks. See the comments in the notebook and example outputs to get a sense of this.
 
 ### Plot performance numbers
@@ -47,11 +49,22 @@ We also include notebooks to plot different performance metrics in `plots/`.
 	mpirun -np 9 python run_configs.py --model gpt3_1T --parallel_strat 1d --global_batch_size 4096
 	```
 	Note that, for 2D versions of tensor parallelism, it might take several minutes to finish since the design/candidate space is large. 1D tensor parallelism is quick. 
-	There are already example outputs for `gp3_1T` and `vit_era5` models (see the paper in references for the model explanations) for all the 9
-	systems in `outputs/`. Using them, you can directly run [plots/plots_overall_perf.ipynb](plots/plots_overall_perf.ipynb) (without generating the configs), to show strong scaling plots as well as optimal configurations, time broken down by various components, memory used on HBM as a function of #GPUs and system. Follow the notebook to get these plots.
+	There are already example outputs for `gp3_1T` and `vit_era5` models (see the paper in references for the model explanations) for all the 9 systems in `outputs/*.npy`. Using them, you can directly run [plots/plots_overall_perf.ipynb](plots/plots_overall_perf.ipynb) (without generating the configs), to show strong scaling plots as well as optimal configurations, time broken down by various components, memory used on HBM as a function of #GPUs and system. Follow the notebook to get these plots. Each `.npy` file contains the following information:
+	```
+  nvs, t_max, t_min, n_gpus, configs = np.load('<file_name>.npy', allow_pickle=True)
+	# nvs is NVLINK/NVSWITCH domain size
+    # t_max is max throughput over top n configs (we've used n = 10)
+    # t_min is min throughput over top n configs
+    # n_gpus is list of #GPUs (could be diff based on how many min GPUs are needed to fit the model)
+    # configs is list n configs: each is (throughput (float), mem (float) used, parallelization config (dict), stats (dict))
+    # parallelization config contains info on DP, TP, PP etc
+    # stats contains info on various time, mem components 
+    # as well as assignment of GPUs to NVLINK/NVSWITCH domains
+    ```
+For `gpt3_1T`, the 2D tensor parallel versions are fastest (but not by a large margin for future GPU generations). For `vit_era5`, 2D tensor parallel versions are necessary.
 
 * **Sweep parallelization configurations to understand bottlenecks**: In [plots/plots_sweep_parallel_configs.ipynb](plots/plots_sweep_parallel_configs.ipynb), we show simple plots to sweep over a range of parallel configurations and see their effect, as well as effect of NVLINK sizes, on different bottlenecks. It also provides simple visualizations of the design-space to show the subtle non-convexities in the space when searching for the optimal configurations. Different cells focus on 1D and the different 2D tensor parallelism strategies.
-* Sweep system parameters to understand system design choices: `TODO`
+* **Sweep system parameters to understand system design choices**: We show simple plots to sweep over different hardware characteristics (such as FLOP rate, capacity, bandwidth, etc.) and associated scripts in [plots/plots_sweep_bw_capacity.ipynb](plots/plots_sweep_bw_capacity.ipynb) and [plots/plots_sweep_flops_cap_bw.ipynb](plots/plots_sweep_flops_cap_bw.ipynb). To run configs, see [sweeps/run_configs_sweep_bwcap.py](sweeps/run_configs_sweep_bwcap.py) etc. These run similar to [run_configs.py](run_configs.py). We have not included sample outputs for these since they generate many files, but they are run in a similar manner and we have included example plots.
 
 ## Reference
 If you find this useful, please cite:
