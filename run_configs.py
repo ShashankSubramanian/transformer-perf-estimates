@@ -2,15 +2,6 @@ import os
 import sys
 import time
 import numpy as np
-import pandas as pd
-from IPython.display import display
-import matplotlib.pyplot as plt
-from matplotlib.ticker import FormatStrFormatter
-from matplotlib.lines import Line2D
-import pprint
-
-pd.options.display.max_columns = None
-pd.options.display.max_rows = None
 from modules import *
 from execution import *
 import json
@@ -39,21 +30,15 @@ if __name__ == '__main__':
     depth = model['depth']
     print('model is {}'.format(model))
 
-    # set data hyperparms
-    if model_str == 'gpt3_1T':
-        total_tokens = 1 * 10**12
-    else:
-        total_tokens = 300 * 10**9
-    num_samples = total_tokens / l
-    if 'vit_era5' in model_str:
-        num_ep = 80
-        num_samples = 350000 * num_ep
-    print('training on {} samples'.format(num_samples))
-
     global_batch_size = args.global_batch_size
+
+    # what systems?
     systems = ['A100-NVS4', 'A100-NVS8', 'A100-NVS64', 'H200-NVS4', 'H200-NVS8', 'H200-NVS64', 'B200-NVS4', 'B200-NVS8', 'B200-NVS64']
+    # which config to use?
     config_names = ['A100', 'A100', 'A100', 'H200', 'H200', 'H200', 'B200', 'B200', 'B200']
+    # set the nvlink sizes (overwrite the config)
     nvlink_sizes = [4, 8, 64, 4, 8, 64, 4, 8, 64]
+    # how many gpus?
     n_gpus = 2**np.array([i for i in range(2,15)])
     n_sys = len(systems)
     print(n_sys)
@@ -62,26 +47,30 @@ if __name__ == '__main__':
 
     rank = MPI.COMM_WORLD.rank
     n_proc = MPI.COMM_WORLD.size
-    print(rank, n_proc)
-    assert n_proc == n_sys
-    systems = [systems[rank]]
-    config_names = [config_names[rank]]
-    nvlink_sizes = [nvlink_sizes[rank]]
-    print('rank {} is doing {}'.format(rank, systems))
+    print("running script on {} procs, printing from rank {}".format(rank, n_proc))
+    if n_proc > 1:
+        assert n_proc == n_sys, 'please use as many procs as systems'
+        systems = [systems[rank]]
+        config_names = [config_names[rank]]
+        nvlink_sizes = [nvlink_sizes[rank]]
+        print('rank {} is doing {}'.format(rank, systems))
 
+    # what parallel strat?
     if args.parallel_strat == '1d':
         execute_fn = execute_1d
-    elif args.parallel_strat == '2d':
+    elif args.parallel_strat == '2d': # summa
         execute_fn = execute_2d
-    elif args.parallel_strat == '2d-seqp':
+    elif args.parallel_strat == '2d-seqp': # context parallel
         execute_fn = execute_seqp
     else:
         assert False, 'parallel strat not valid'
 
+    os.makedirs("./outputs", exist_ok=True)
+
     for sidx, sys_str in enumerate(systems):
         with open('systems/config-' + config_names[sidx] + '.json', 'r') as file:
             system = json.load(file)
-        nvs_list = [nvlink_sizes[sidx]]
+        nvs_list = [nvlink_sizes[sidx]] # overwrite nvs
         print(sys_str, nvs_list)
         plots = []
         for nvs in nvs_list:

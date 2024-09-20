@@ -291,9 +291,6 @@ class LinearSumma(Estimates):
         activation_buffer = (b * l_local * e_local_1) * element_size # store for bwd pass
         weights_mem = (e_local_2 * f_local) * element_size
         
-        # careful, nb is arbitrarily chosen here
-        # panel size e/n_b is some value << e/max(m1,m2)
-#        n_b = e // 512 if m1 != m2 else m1
         n_b = self.system['summa_nb']
         self.n_b = n_b
         mem_fwd  = (b * l_local * e + e * f_local + b * l_local * f_local * n_b) * element_size
