@@ -115,7 +115,7 @@ def summa_nb_candidates(tp1, tp2, embed):
             if embed % c == 0 and embed // c >= max_dim:
                 yield c
 
-def totals(df_mlp, df_sa, df_dp, df_pp, depth, pp=1, dp=1, number_micro_batches=1, verbose=False):
+def totals(df_mlp, df_sa, df_dp, df_pp, depth, pp=1, dp=1, seqp=1, number_micro_batches=1, verbose=False):
     ''' total time to do forward and backward pass given all the parallelism '''
     # flops
     flops_per_gpu = (df_mlp['flops_fwd'].sum() + df_mlp['flops_bwd'].sum() + df_sa['flops_fwd'].sum() + df_sa['flops_bwd'].sum()) * (depth // pp) * number_micro_batches
@@ -138,8 +138,8 @@ def totals(df_mlp, df_sa, df_dp, df_pp, depth, pp=1, dp=1, number_micro_batches=
     # mem
     wts_one_layer = (df_mlp['weights_mem'].sum() + df_sa['weights_mem'].sum())
     wts = wts_one_layer * (depth // pp) # not a function of batch size
-    wts_grad = wts / dp
-    wts_optimizer_states = 6 * (wts / dp) # 2wts for fp32 copy of weights, mom, variance
+    wts_grad = wts # store wt grads as well
+    wts_optimizer_states = 6 * (wts / (dp * seqp)) # 2wts for fp32 copy of weights, mom, variance
     acts = (df_mlp['activation_buffer'].sum() + df_sa['activation_buffer'].sum()) * (depth // pp) # store microbatch of acts
     # assume 1F1B
     mem_factor = pp if number_micro_batches >= pp else number_micro_batches
@@ -418,7 +418,7 @@ def execute_seqp(model, n_gpus, global_batch_size=2048, system={}, verbose=False
             df_pp = pipelineparallel(modules=[df_mlp, df_sa], number_micro_batches=number_micro_batches, comm_vol=p2p_comm_vol, pp=pp, t_pp=t_pp, overlap=False, system=system)
 
             # total time
-            (t, mem), stats = totals(df_mlp, df_sa, df_dp, df_pp, depth, pp=pp, dp=dp, number_micro_batches=number_micro_batches)
+            (t, mem), stats = totals(df_mlp, df_sa, df_dp, df_pp, depth, pp=pp, dp=dp, seqp=tp2, number_micro_batches=number_micro_batches)
             stats['nv_tp1'] = t1
             stats['nv_tp2'] = t2
             stats['nv_dp'] = t_dp
