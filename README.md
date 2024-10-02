@@ -1,6 +1,6 @@
 # Performance Estimates for Large AI Transformer Models
 
-This repository implements code from this paper [`TODO`],  that analytically models the performance of transformers in three steps: 
+This repository implements code from this [paper](https://arxiv.org/abs/2410.00273),  that analytically models the performance of transformers in three steps: 
 
 * Count the FLOPs, #memory accesses, communication volume of each operation in the transformer, as well as the memory consumed to hold intermediate activation maps (for the backward pass) and weights. 
 * Compute the theoretical time for the forward and backward pass, given underlying system (accelerator and network) characteristics.
@@ -68,3 +68,14 @@ For `gpt3_1T`, the 2D tensor parallel versions are fastest (but not by a large m
 
 ## Reference
 If you find this useful, please cite:
+```
+@misc{subramanian2024performancemodel,
+      title={Comprehensive Performance Modeling and System Design Insights for Foundation Models},
+      author={Shashank Subramanian and Ermal Rrapaj and Peter Harrington and Smeet Chheda and Steven Farrell and Brian Austin and Samuel Williams and Nicholas Wright and Wahid Bhimji},
+      year={2024},
+      eprint={2410.00273},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2410.00273},
+}
+```
